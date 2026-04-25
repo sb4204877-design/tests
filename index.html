@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#060a12">
+  <title>Ultra Pro Trading Chart</title>
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- تحسينات الحدة والأداء -->
+  <style>
+    * { -webkit-font-smoothing: antialiased !important; -moz-osx-font-smoothing: grayscale !important; }
+    canvas {
+      image-rendering: pixelated !important;
+      image-rendering: crisp-edges !important;
+      will-change: transform;
+      transform: translateZ(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- شريط الأدوات -->
+  <header id="toolbar" dir="rtl">
+    <div class="toolbar-group">
+      <button id="symbol-btn" class="tb-btn primary">BTC/USDT</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn active" data-tf="1m">1m</button>
+      <button class="tb-btn" data-tf="5m">5m</button>
+      <button class="tb-btn" data-tf="15m">15m</button>
+      <button class="tb-btn" data-tf="1h">1h</button>
+      <button class="tb-btn" data-tf="4h">4h</button>
+      <button class="tb-btn" data-tf="1d">1D</button>
+    </div>
+    <div class="toolbar-group">
+      <button id="btn-ma" class="tb-btn indicator">MA</button>
+      <button id="btn-bb" class="tb-btn indicator">BB</button>
+      <button id="btn-vol" class="tb-btn indicator">VOL</button>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <div class="price-info" dir="ltr">
+      <span id="current-price">—</span>
+      <span id="price-change">—</span>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="connection-status" dir="ltr">
+      <span id="live-dot" class="live-dot"></span>
+      <span id="conn-text">...</span>
+    </div>
+  </header>
+
+  <!-- منطقة الشارت -->
+  <main id="chart-layout" dir="ltr">
+    <div id="canvas-wrapper" dir="ltr">
+      <div id="main-canvas-area">
+        <!-- كانفاس واحد ذكي: يكتشف تلقائياً أفضل طريقة للرسم -->
+        <canvas id="main-canvas"></canvas>
+        <div id="price-label"></div>
+        <div id="xhair-box"></div>
+        <div id="indicator-values"></div>
+        <div id="alert-container"></div>
+      </div>
+      <canvas id="price-axis-canvas"></canvas>
+      <div id="time-axis-area">
+        <canvas id="time-axis-canvas"></canvas>
+        <div id="axis-corner"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- شاشة التحميل -->
+  <div id="loading-overlay">
+    <div class="loader-ring"></div>
+    <div id="loading-text">جارٍ التحميل...</div>
+  </div>
+
+  <!-- تحميل الملفات بترتيب بسيط وموثوق -->
+  <script src="config.js"></script>
+  <script src="data-feed.js"></script>
+  <script src="indicators.js"></script>
+  <script src="renderer.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
