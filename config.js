@@ -6,6 +6,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  * هذا الملف يحتوي على جميع الثوابت والإعدادات العامة
  * يتم استيراده في جميع الملفات الأخرى دون تعديل
+ * ✅ تمت إضافة سجل المؤشرات (IndicatorRegistry) لدعم الإضافة الديناميكية
  */
 
 const CFG = {
@@ -199,6 +200,7 @@ class EventBus {
 
 // إنشاء مثيل عالمي لاستخدامه في جميع الملفات
 const bus = new EventBus();
+
 // ═══════════════════════════════════════════════════════════════════════
 // UTILITIES - دوال مساعدة (مفقودة سابقاً وتسبب التجمد)
 // ═══════════════════════════════════════════════════════════════════════
@@ -225,6 +227,59 @@ const Utils = {
     return map[str] || 60000;
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ Indicator Plugin Registry - نظام تسجيل المؤشرات المستقلة
+// ═══════════════════════════════════════════════════════════════════════
+// يسمح للمؤشرات الخارجية بالتسجيل تلقائياً وإنشاء أزرارها وحسابها ورسمها
+// دون الحاجة لتعديل أي ملف آخر في النظام.
+// ═══════════════════════════════════════════════════════════════════════
+if (typeof window !== 'undefined' && typeof window.IndicatorRegistry === 'undefined') {
+  window.IndicatorRegistry = new (class {
+    constructor() {
+      this.plugins = {};
+      this._initialized = false;
+    }
+
+    register(id, plugin) {
+      if (!id || typeof plugin !== 'object' || !plugin.calculate) {
+        console.error(`[IndicatorRegistry] Invalid plugin registration for "${id}"`);
+        return false;
+      }
+      if (this.plugins[id]) {
+        console.warn(`[IndicatorRegistry] Plugin "${id}" already registered, overwriting`);
+      }
+      // دمج الإعدادات وحالة التشغيل الافتراضية
+      this.plugins[id] = {
+        id,
+        enabled: false,
+        ...plugin
+      };
+      console.log(`[IndicatorRegistry] ✓ Registered: ${plugin.name || id}`);
+
+      // إذا كان التطبيق جاهزاً بالفعل، أخطرِه فوراً بالمؤشر الجديد
+      if (this._initialized && typeof window.chartApp !== 'undefined' && typeof bus !== 'undefined') {
+        bus.emit('indicator:registered', { id, plugin });
+      }
+      return true;
+    }
+
+    get(id) { return this.plugins[id] || null; }
+    getAll() { return Object.values(this.plugins); }
+    getEnabled() { return Object.values(this.plugins).filter(p => p.enabled); }
+    has(id) { return id in this.plugins; }
+    
+    unregister(id) {
+      const plugin = this.plugins[id];
+      if (plugin?.destroy) plugin.destroy();
+      delete this.plugins[id];
+      return true;
+    }
+    
+    markInitialized() { this._initialized = true; }
+  })();
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // تصدير الإعدادات (للتوافق مع وحدات ES6 إذا لزم الأمر لاحقاً)
 // ─────────────────────────────────────────────────────────────────────
