@@ -6,6 +6,9 @@
  * ✅ LOD System: Full Candles → Thin Candles → OHLC Line → Line Chart
  * ✅ Pixel Perfect: Snap precision + نصف بكسل دقيق
  * ✅ نظام مرن: يعتمد على 4 بدائيات فقط لرسم أي شيء
+ * ✅ ✅ توحيد نظام الألوان: كل الألوان تُقرأ من CFG.colors
+ * ✅ ✅ تحسين وضوح الشموع: عتبات LOD أفضل + ألفا قابلة للتحكم
+ * ✅ ✅ تحكم في توهج العداد: CFG.ui.enableTimerShadow
  *    1. drawLine (لرسم أي خط: MA, RSI, خطوط الشبكة...)
  *    2. drawArea (لرسم أي منطقة مملوئة: البولينجر، التظليل...)
  *    3. drawShapes (لرسم أي شكل: أسهم، دوائر، مربعات، سويبات...)
@@ -21,23 +24,55 @@ function hasWebGLSupport() {
   } catch { return false; }
 }
 
+// ✅ محسّن: إرجاع قيمة ألفا مع مقاييس الشمعة للتحكم في الشفافية حسب مستوى التكبير
 function candleMetricsPrecision(index, ts) {
   const stepPx = ts.spacing;
   const offsetPx = ts.offset;
   const centerX = offsetPx + index * stepPx;
   const centerXSnap = Math.round(centerX);
 
-  let bodyWidth; let mode = 'full';
-  if (stepPx >= 8) { bodyWidth = Math.max(3, Math.floor(stepPx * 0.72)); mode = 'full'; }
-  else if (stepPx >= 5) { bodyWidth = Math.max(1, Math.floor(stepPx * 0.60)); mode = 'thin'; }
-  else if (stepPx >= 3.5) { bodyWidth = 1; mode = 'line'; }
-  else { bodyWidth = 1; mode = 'line-only'; }
+  let bodyWidth; let mode = 'full'; let alpha = 1.0;
+  
+  // ✅ تحسين عتبات LOD لدعم الشاشات الصغيرة مع وضوح أفضل
+  const minStep = typeof CFG !== 'undefined' && CFG.minSpacing ? CFG.minSpacing : 1.5;
+  
+  if (stepPx >= 8) { 
+    bodyWidth = Math.max(3, Math.floor(stepPx * 0.72)); 
+    mode = 'full'; 
+    alpha = 1.0;
+  }
+  else if (stepPx >= 4) { // ✅ خفضنا العتبة من 5 إلى 4 لوضوح أفضل
+    bodyWidth = Math.max(2, Math.floor(stepPx * 0.65)); 
+    mode = 'thin'; 
+    alpha = 0.95;
+  }
+  else if (stepPx >= 2.5) { // ✅ خفضنا العتبة من 3.5 إلى 2.5
+    bodyWidth = 2; // ✅ عرض أكبر قليلاً للخط
+    mode = 'line'; 
+    alpha = 0.9;
+  }
+  else { 
+    bodyWidth = 1.5; // ✅ ليس 1 فقط لتحسين الوضوح
+    mode = 'line-only'; 
+    // ✅ استخدام قيمة ألفا قابلة للتخصيص من الإعدادات
+    alpha = typeof CFG !== 'undefined' && CFG.colors?.minZoomAlpha 
+      ? CFG.colors.minZoomAlpha 
+      : 0.9;
+  }
 
   const halfBody = Math.floor(bodyWidth / 2);
   const bodyLeft = centerXSnap - halfBody;
   const bodyRight = bodyLeft + bodyWidth;
 
-  return { centerX: centerXSnap, bodyLeft, bodyRight, bodyWidth, mode, stepPx };
+  return { centerX: centerXSnap, bodyLeft, bodyRight, bodyWidth, mode, stepPx, alpha };
+}
+
+// ✅ دالة مساعدة موحدة لجلب الألوان من CFG مع قيمة افتراضية
+function getColor(key, fallback) {
+  if (typeof CFG !== 'undefined' && CFG.colors && CFG.colors[key]) {
+    return CFG.colors[key];
+  }
+  return fallback || '#060a12';
 }
 
 class ChartRenderer {
@@ -99,15 +134,18 @@ class Canvas2DRenderer {
     return true;
   }
 
-  clear(col = '#060a12') {
-    this.ctx.fillStyle = col;
+  // ✅ ✅ إصلاح: قراءة لون الخلفية من الإعدادات إذا لم يُمرّر لون
+  clear(col) {
+    const bgColor = col || getColor('bg', '#060a12');
+    this.ctx.fillStyle = bgColor;
     this.ctx.fillRect(0, 0, this.w, this.h);
   }
 
   drawGrid(ps, ts, chartH) {
     const { ctx, w, h } = this;
     ctx.save();
-    ctx.strokeStyle = '#0f1c2e';
+    // ✅ استخدام ألوان من CFG
+    ctx.strokeStyle = getColor('grid', '#0f1c2e');
     ctx.lineWidth = 1 / this.dpr;
     ctx.setLineDash([4, 4]);
     const r = ps.max - ps.min;
@@ -118,7 +156,7 @@ class Canvas2DRenderer {
       ctx.beginPath(); ctx.moveTo(0, ySnap); ctx.lineTo(w, ySnap); ctx.stroke();
     }
     ctx.setLineDash([]);
-    ctx.strokeStyle = '#172438';
+    ctx.strokeStyle = getColor('gridBright', '#172438');
     const vLines = this._buildTimeGridLines(ts, w, h);
     for (let j = 0; j < vLines.length; j += 4) {
       ctx.beginPath(); ctx.moveTo(vLines[j], vLines[j+1]); ctx.lineTo(vLines[j+2], vLines[j+3]); ctx.stroke();
@@ -147,49 +185,112 @@ class Canvas2DRenderer {
 
   drawCandles(candles, ts, ps, chartH) {
     const { ctx, w } = this; const vr = ts.getVisibleRange(w);
+    
+    // ✅ جلب الألوان من الإعدادات الموحدة
+    const colorUp = getColor('up', '#28c900');
+    const colorDown = getColor('down', '#ff0000');
+    const wickColor = getColor('wick', null);
+    
     for (let i = vr.start; i <= vr.end; i++) {
       const c = candles[i]; if (!c) continue;
       const metrics = candleMetricsPrecision(i, ts);
       if (metrics.centerX < -ts.spacing - 2 || metrics.centerX > w + ts.spacing + 2) continue;
-      const yH = Math.round(ps.priceToY(c.high, chartH)) + 0.5; const yL = Math.round(ps.priceToY(c.low, chartH)) + 0.5;
-      const yO = Math.round(ps.priceToY(c.open, chartH)); const yC = Math.round(ps.priceToY(c.close, chartH));
-      const isUp = c.close >= c.open; const color = isUp ? '#28c900' : '#ff0000';
+      
+      const yH = Math.round(ps.priceToY(c.high, chartH)) + 0.5; 
+      const yL = Math.round(ps.priceToY(c.low, chartH)) + 0.5;
+      const yO = Math.round(ps.priceToY(c.open, chartH)); 
+      const yC = Math.round(ps.priceToY(c.close, chartH));
+      
+      const isUp = c.close >= c.open; 
+      const color = isUp ? colorUp : colorDown;
+      const strokeColor = wickColor || color; // استخدام لون الفتيل المخصص إذا وجد
+      
       if (metrics.mode === 'line-only' || metrics.mode === 'line') {
-        ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.85;
-        ctx.beginPath(); ctx.moveTo(metrics.centerX + 0.5, yH); ctx.lineTo(metrics.centerX + 0.5, yL); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = strokeColor; 
+        ctx.lineWidth = 1; 
+        // ✅ استخدام قيمة ألفا من المقاييس بدلاً من قيمة ثابتة
+        ctx.globalAlpha = metrics.alpha ?? 0.9;
+        ctx.beginPath(); 
+        ctx.moveTo(metrics.centerX + 0.5, yH); 
+        ctx.lineTo(metrics.centerX + 0.5, yL); 
+        ctx.stroke(); 
+        ctx.globalAlpha = 1;
       } else {
-        ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.85;
-        ctx.beginPath(); ctx.moveTo(metrics.centerX + 0.5, yH); ctx.lineTo(metrics.centerX + 0.5, yL); ctx.stroke();
-        const bodyTop = Math.min(yO, yC); const bodyHeight = Math.max(1, Math.abs(yC - yO));
-        ctx.fillStyle = color; ctx.globalAlpha = isUp ? 0.95 : 0.90;
-        ctx.fillRect(metrics.bodyLeft, bodyTop, metrics.bodyWidth, bodyHeight); ctx.globalAlpha = 1;
+        ctx.strokeStyle = strokeColor; 
+        ctx.lineWidth = 1; 
+        ctx.globalAlpha = metrics.alpha ?? 0.9;
+        ctx.beginPath(); 
+        ctx.moveTo(metrics.centerX + 0.5, yH); 
+        ctx.lineTo(metrics.centerX + 0.5, yL); 
+        ctx.stroke();
+        
+        const bodyTop = Math.min(yO, yC); 
+        const bodyHeight = Math.max(1, Math.abs(yC - yO));
+        ctx.fillStyle = color; 
+        // ✅ ألفا أعلى للأجسام لتحسين الوضوح
+        ctx.globalAlpha = isUp ? 0.98 : 0.95;
+        ctx.fillRect(metrics.bodyLeft, bodyTop, metrics.bodyWidth, bodyHeight); 
+        ctx.globalAlpha = 1;
       }
     }
     ctx.globalAlpha = 1;
   }
 
   drawPriceLine(price, isUp, ps, chartH) {
-    if (!ps || !chartH) return -1; const y = Math.round(ps.priceToY(price, chartH)) + 0.5;
-    this.ctx.strokeStyle = isUp ? '#15ff00' : '#ff0000'; this.ctx.lineWidth = 1; this.ctx.setLineDash([4, 3]); this.ctx.globalAlpha = 0.6;
-    this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.w, y); this.ctx.stroke();
-    this.ctx.setLineDash([]); this.ctx.globalAlpha = 1; return y;
+    if (!ps || !chartH) return -1; 
+    const y = Math.round(ps.priceToY(price, chartH)) + 0.5;
+    
+    // ✅ استخدام ألوان من الإعدادات
+    this.ctx.strokeStyle = isUp ? getColor('priceLine', '#2196f3') : getColor('down', '#ff0000');
+    this.ctx.lineWidth = 1; 
+    this.ctx.setLineDash([4, 3]); 
+    this.ctx.globalAlpha = 0.6;
+    this.ctx.beginPath(); 
+    this.ctx.moveTo(0, y); 
+    this.ctx.lineTo(this.w, y); 
+    this.ctx.stroke();
+    this.ctx.setLineDash([]); 
+    this.ctx.globalAlpha = 1; 
+    return y;
   }
 
   drawCrosshair(x, y) {
     if (x < 0 || y < 0 || x > this.w || y > this.h) return;
-    const { ctx, w, h } = this; const px = Math.round(x) + 0.5; const py = Math.round(y) + 0.5;
-    ctx.strokeStyle = 'rgba(150,180,220,0.5)'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    const { ctx, w, h } = this; 
+    const px = Math.round(x) + 0.5; 
+    const py = Math.round(y) + 0.5;
+    
+    // ✅ استخدام لون من الإعدادات
+    ctx.strokeStyle = getColor('crosshair', 'rgba(150,180,220,0.5)'); 
+    ctx.lineWidth = 1; 
+    ctx.setLineDash([3, 4]);
     ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke(); 
+    ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#060a12'; ctx.fill(); ctx.strokeStyle = 'rgba(150,180,220,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = getColor('bg', '#060a12'); 
+    ctx.fill(); 
+    ctx.strokeStyle = getColor('crosshair', 'rgba(150,180,220,0.5)'); 
+    ctx.lineWidth = 1; 
+    ctx.stroke();
   }
 
   drawTimer(text, x, y, color = '#4da6ff', fontSize = 11) {
-    const { ctx } = this; ctx.save();
-    ctx.font = `bold ${fontSize}px 'Segoe UI', monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = color; ctx.shadowColor = 'rgba(0,15,40,0.7)'; ctx.shadowBlur = 6;
-    ctx.fillText(text, x, y + 1); ctx.restore();
+    const { ctx } = this; 
+    ctx.save();
+    ctx.font = `bold ${fontSize}px 'Segoe UI', monospace`; 
+    ctx.textAlign = 'center'; 
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    
+    // ✅ التحكم في التوهج عبر الإعدادات
+    if (typeof CFG !== 'undefined' && CFG.ui?.enableTimerShadow !== false) {
+      ctx.shadowColor = getColor('timerShadow', 'rgba(0,15,40,0.4)');
+      ctx.shadowBlur = 3; // ✅ قيمة أصغر لتوهج أخف
+    }
+    
+    ctx.fillText(text, x, y + 1); 
+    ctx.restore();
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -388,12 +489,21 @@ class WebGLRenderer {
     return true;
   }
 
-  clear(color = '#060a12') {
+  // ✅ ✅ إصلاح: قراءة لون الخلفية من الإعدادات إذا لم يُمرّر لون
+  clear(color) {
     const gl = this.gl;
-    const r = parseInt(color.slice(1, 3), 16) / 255, g = parseInt(color.slice(3, 5), 16) / 255, b = parseInt(color.slice(5, 7), 16) / 255;
-    gl.clearColor(r, g, b, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (this.ctx2d) { this.ctx2d.clearRect(0, 0, this.width, this.height); }
+    // ✅ قراءة اللون من الإعدادات إذا لم يُمرّر
+    const bgColor = color || getColor('bg', '#060a12');
+    const r = parseInt(bgColor.slice(1, 3), 16) / 255, 
+          g = parseInt(bgColor.slice(3, 5), 16) / 255, 
+          b = parseInt(bgColor.slice(5, 7), 16) / 255;
+    gl.clearColor(r, g, b, 1); 
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.BLEND); 
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (this.ctx2d) { 
+      this.ctx2d.clearRect(0, 0, this.width, this.height); 
+    }
   }
 
   _parseColor(str) {
@@ -424,7 +534,7 @@ class WebGLRenderer {
     for (let i = 0; i <= 6; i++) { const price = ps.min + (range / 6) * i; const y = ps.priceToY(price, chartH); const ySnap = Math.round(y) + 0.5; lines.push(0, ySnap * dpr, this.width * dpr, ySnap * dpr); }
     const vLines = this._buildTimeGridLines(ts, this.width, this.height);
     for (let j = 0; j < vLines.length; j += 4) { lines.push(vLines[j] * dpr, vLines[j + 1] * dpr, vLines[j + 2] * dpr, vLines[j + 3] * dpr); }
-    this._drawArrays(gl.LINES, lines, '#0f1c2e');
+    this._drawArrays(gl.LINES, lines, getColor('grid', '#0f1c2e'));
   }
 
   _buildTimeGridLines(ts, w, h) {
@@ -448,22 +558,58 @@ class WebGLRenderer {
   drawCandles(candles, ts, ps, chartH) {
     const gl = this.gl; if (!gl) return; const dpr = this.dpr; const vr = ts.getVisibleRange(this.width);
     const wickV = [], wickC = [], bodyV = [], bodyC = [], lineV = [], lineC = [];
+    
+    // ✅ جلب الألوان من CFG
+    const colorUp = getColor('up', '#15ff00');
+    const colorDown = getColor('down', '#ff0000');
+    
     for (let i = vr.start; i <= vr.end; i++) {
-      const c = candles[i]; if (!c) continue; const metrics = candleMetricsPrecision(i, ts);
+      const c = candles[i]; if (!c) continue; 
+      const metrics = candleMetricsPrecision(i, ts);
       if (metrics.centerX < -ts.spacing - 2 || metrics.centerX > this.width + ts.spacing + 2) continue;
-      const yH = Math.round(ps.priceToY(c.high, chartH)) + 0.5; const yL = Math.round(ps.priceToY(c.low, chartH)) + 0.5;
-      const yO = Math.round(ps.priceToY(c.open, chartH)); const yC = Math.round(ps.priceToY(c.close, chartH));
-      const isUp = c.close >= c.open; const col = this._parseColor(isUp ? '#00ff55' : '#ff3030');
-      const colWithAlpha = [...col]; colWithAlpha[3] = 0.85;
+      
+      const yH = Math.round(ps.priceToY(c.high, chartH)) + 0.5; 
+      const yL = Math.round(ps.priceToY(c.low, chartH)) + 0.5;
+      const yO = Math.round(ps.priceToY(c.open, chartH)); 
+      const yC = Math.round(ps.priceToY(c.close, chartH));
+      
+      const isUp = c.close >= c.open; 
+      // ✅ استخدام الألوان الموحدة
+      const baseColor = isUp ? colorUp : colorDown;
+      const col = this._parseColor(baseColor);
+      
+      // ✅ استخدام ألفا من المقاييس
+      const alpha = metrics.alpha ?? 0.9;
+      const colWithAlpha = [...col]; colWithAlpha[3] = alpha;
+      
       if (metrics.mode === 'line-only' || metrics.mode === 'line') {
-        lineV.push((metrics.centerX + 0.5) * dpr, yH * dpr, (metrics.centerX + 0.5) * dpr, yL * dpr); lineC.push(...colWithAlpha, ...colWithAlpha);
+        lineV.push((metrics.centerX + 0.5) * dpr, yH * dpr, (metrics.centerX + 0.5) * dpr, yL * dpr); 
+        lineC.push(...colWithAlpha, ...colWithAlpha);
       } else {
         const wickW = 0.5;
-        wickV.push((metrics.centerX + 0.5 - wickW) * dpr, yH * dpr, (metrics.centerX + 0.5 + wickW) * dpr, yH * dpr, (metrics.centerX + 0.5 + wickW) * dpr, yL * dpr, (metrics.centerX + 0.5 - wickW) * dpr, yH * dpr, (metrics.centerX + 0.5 + wickW) * dpr, yL * dpr, (metrics.centerX + 0.5 - wickW) * dpr, yL * dpr);
+        wickV.push(
+          (metrics.centerX + 0.5 - wickW) * dpr, yH * dpr, 
+          (metrics.centerX + 0.5 + wickW) * dpr, yH * dpr, 
+          (metrics.centerX + 0.5 + wickW) * dpr, yL * dpr, 
+          (metrics.centerX + 0.5 - wickW) * dpr, yH * dpr, 
+          (metrics.centerX + 0.5 + wickW) * dpr, yL * dpr, 
+          (metrics.centerX + 0.5 - wickW) * dpr, yL * dpr
+        );
         for (let j = 0; j < 6; j++) wickC.push(...colWithAlpha);
-        const bodyTop = Math.min(yO, yC); const bodyH = Math.max(1, Math.abs(yC - yO));
-        bodyV.push(metrics.bodyLeft * dpr, bodyTop * dpr, metrics.bodyRight * dpr, bodyTop * dpr, metrics.bodyRight * dpr, (bodyTop + bodyH) * dpr, metrics.bodyLeft * dpr, bodyTop * dpr, metrics.bodyRight * dpr, (bodyTop + bodyH) * dpr, metrics.bodyLeft * dpr, (bodyTop + bodyH) * dpr);
-        for (let j = 0; j < 6; j++) bodyC.push(...col);
+        
+        const bodyTop = Math.min(yO, yC); 
+        const bodyH = Math.max(1, Math.abs(yC - yO));
+        bodyV.push(
+          metrics.bodyLeft * dpr, bodyTop * dpr, 
+          metrics.bodyRight * dpr, bodyTop * dpr, 
+          metrics.bodyRight * dpr, (bodyTop + bodyH) * dpr, 
+          metrics.bodyLeft * dpr, bodyTop * dpr, 
+          metrics.bodyRight * dpr, (bodyTop + bodyH) * dpr, 
+          metrics.bodyLeft * dpr, (bodyTop + bodyH) * dpr
+        );
+        // ✅ ألفا أعلى للأجسام
+        const bodyAlpha = [...col]; bodyAlpha[3] = isUp ? 0.98 : 0.95;
+        for (let j = 0; j < 6; j++) bodyC.push(...bodyAlpha);
       }
     }
     if (wickV.length >= 6) this._drawArrays(gl.TRIANGLES, wickV, wickC);
@@ -472,27 +618,55 @@ class WebGLRenderer {
   }
 
   drawPriceLine(price, isUp, ps, chartH) {
-    const gl = this.gl; if (!gl || !ps || !chartH) return -1; const dpr = this.dpr; const y = Math.round(ps.priceToY(price, chartH)) + 0.5;
+    const gl = this.gl; if (!gl || !ps || !chartH) return -1; 
+    const dpr = this.dpr; 
+    const y = Math.round(ps.priceToY(price, chartH)) + 0.5;
+    
+    const color = isUp ? getColor('priceLine', '#2196f3') : getColor('down', '#ff0000');
     const dashedVerts = []; const dashLen = 6; const gapLen = 4;
-    for (let x = 0; x < this.width; x += dashLen + gapLen) { const endX = Math.min(x + dashLen, this.width); dashedVerts.push(x * dpr, y * dpr, endX * dpr, y * dpr); }
-    this._drawArrays(gl.LINES, dashedVerts, isUp ? '#2ee600' : '#ff0000'); return y;
+    for (let x = 0; x < this.width; x += dashLen + gapLen) { 
+      const endX = Math.min(x + dashLen, this.width); 
+      dashedVerts.push(x * dpr, y * dpr, endX * dpr, y * dpr); 
+    }
+    this._drawArrays(gl.LINES, dashedVerts, color); 
+    return y;
   }
 
   drawCrosshair(x, y) {
-    const gl = this.gl; if (!gl) return; const dpr = this.dpr; const px = Math.round(x) + 0.5; const py = Math.round(y) + 0.5;
-    this._drawArrays(gl.LINES, [ px * dpr, 0, px * dpr, this.height * dpr, 0, py * dpr, this.width * dpr, py * dpr ], 'rgba(150,180,220,0.6)');
+    const gl = this.gl; if (!gl) return; 
+    const dpr = this.dpr; 
+    const px = Math.round(x) + 0.5; 
+    const py = Math.round(y) + 0.5;
+    
+    this._drawArrays(gl.LINES, 
+      [ px * dpr, 0, px * dpr, this.height * dpr, 0, py * dpr, this.width * dpr, py * dpr ], 
+      getColor('crosshair', 'rgba(150,180,220,0.6)')
+    );
+    
     if (this.ctx2d) {
       this.ctx2d.beginPath(); this.ctx2d.arc(x, y, 4, 0, Math.PI * 2);
-      this.ctx2d.fillStyle = '#060a12'; this.ctx2d.fill();
-      this.ctx2d.strokeStyle = 'rgba(150,180,220,0.6)'; this.ctx2d.lineWidth = 1; this.ctx2d.stroke();
+      this.ctx2d.fillStyle = getColor('bg', '#060a12'); this.ctx2d.fill();
+      this.ctx2d.strokeStyle = getColor('crosshair', 'rgba(150,180,220,0.6)'); 
+      this.ctx2d.lineWidth = 1; this.ctx2d.stroke();
     }
   }
 
   drawTimer(text, x, y, color = '#4da6ff', fontSize = 11) {
-    if (!this.ctx2d) return; this.ctx2d.save();
-    this.ctx2d.font = `bold ${fontSize}px 'Segoe UI', monospace`; this.ctx2d.textAlign = 'center'; this.ctx2d.textBaseline = 'middle';
-    this.ctx2d.fillStyle = color; this.ctx2d.shadowColor = 'rgba(0,15,40,0.7)'; this.ctx2d.shadowBlur = 6;
-    this.ctx2d.fillText(text, x / this.dpr, y / this.dpr + 1); this.ctx2d.restore();
+    if (!this.ctx2d) return; 
+    this.ctx2d.save();
+    this.ctx2d.font = `bold ${fontSize}px 'Segoe UI', monospace`; 
+    this.ctx2d.textAlign = 'center'; 
+    this.ctx2d.textBaseline = 'middle';
+    this.ctx2d.fillStyle = color;
+    
+    // ✅ التحكم في التوهج عبر الإعدادات
+    if (typeof CFG !== 'undefined' && CFG.ui?.enableTimerShadow !== false) {
+      this.ctx2d.shadowColor = getColor('timerShadow', 'rgba(0,15,40,0.4)');
+      this.ctx2d.shadowBlur = 3;
+    }
+    
+    this.ctx2d.fillText(text, x / this.dpr, y / this.dpr + 1); 
+    this.ctx2d.restore();
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -624,19 +798,34 @@ class PriceAxisRenderer {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); this.ctx.imageSmoothingEnabled = false; return true;
   }
   render(ps, chartH, crossY = -1, lastPrice = -1, isUp = false, priceStr = '') {
-    const { ctx, w, h } = this; ctx.fillStyle = '#060a12'; ctx.fillRect(0, 0, w, h);
-    ctx.font = `${typeof CFG !== 'undefined' && CFG.isMobile ? 9 : 10}px monospace`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    const { ctx, w, h } = this; 
+    // ✅ استخدام لون الخلفية من الإعدادات
+    ctx.fillStyle = getColor('bg', '#060a12'); 
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = `${typeof CFG !== 'undefined' && CFG.isMobile ? 9 : 10}px monospace`; 
+    ctx.textAlign = 'right'; 
+    ctx.textBaseline = 'middle';
     const r = ps.max - ps.min;
     for (let i = 0; i <= 6; i++) {
-      const p = ps.min + (r / 6) * i; const y = Math.round(ps.priceToY(p, chartH)) + 0.5;
-      if (y < 8 || y > h - 8) continue; ctx.fillStyle = '#4a6a8a';
+      const p = ps.min + (r / 6) * i; 
+      const y = Math.round(ps.priceToY(p, chartH)) + 0.5;
+      if (y < 8 || y > h - 8) continue; 
+      // ✅ استخدام لون نص من الإعدادات
+      ctx.fillStyle = getColor('text', '#4a6a8a');
       ctx.fillText(typeof Utils !== 'undefined' && Utils.fmtPrice ? Utils.fmtPrice(p) : p.toFixed(2), w - 6, y + 1);
     }
     if (crossY >= 0 && crossY <= chartH) {
-      const pcy = Math.round(crossY) + 0.5; const cp = ps.yToPrice(crossY, chartH);
-      ctx.fillStyle = '#060a12'; ctx.fillRect(0, pcy - 9, w, 18);
-      ctx.strokeStyle = '#8aaccc'; ctx.lineWidth = 1 / this.dpr; ctx.strokeRect(1, pcy - 9, w - 2, 18);
-      ctx.fillStyle = '#e0ecff'; ctx.fillText(typeof Utils !== 'undefined' && Utils.fmtPrice ? Utils.fmtPrice(cp) : cp.toFixed(2), w - 6, pcy + 1);
+      const pcy = Math.round(crossY) + 0.5; 
+      const cp = ps.yToPrice(crossY, chartH);
+      // ✅ استخدام لون الخلفية من الإعدادات
+      ctx.fillStyle = getColor('bg', '#060a12'); 
+      ctx.fillRect(0, pcy - 9, w, 18);
+      ctx.strokeStyle = getColor('textBright', '#8aaccc'); 
+      ctx.lineWidth = 1 / this.dpr; 
+      ctx.strokeRect(1, pcy - 9, w - 2, 18);
+      // ✅ استخدام لون نص أبيض للقيمة المحددة
+      ctx.fillStyle = getColor('textWhite', '#e0ecff'); 
+      ctx.fillText(typeof Utils !== 'undefined' && Utils.fmtPrice ? Utils.fmtPrice(cp) : cp.toFixed(2), w - 6, pcy + 1);
     }
   }
 }
@@ -650,12 +839,19 @@ class TimeAxisRenderer {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); this.ctx.imageSmoothingEnabled = false; return true;
   }
   render(ts, candles, w, cx = -1) {
-    const { ctx, h } = this; ctx.fillStyle = '#060a12'; ctx.fillRect(0, 0, w, h);
-    const vr = ts.getVisibleRange(w); ctx.font = `${typeof CFG !== 'undefined' && CFG.isMobile ? 8 : 9}px monospace`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const data = ts.data; if (!data || data.length === 0) return;
+    const { ctx, h } = this; 
+    // ✅ استخدام لون الخلفية من الإعدادات
+    ctx.fillStyle = getColor('bg', '#060a12'); 
+    ctx.fillRect(0, 0, w, h);
+    const vr = ts.getVisibleRange(w); 
+    ctx.font = `${typeof CFG !== 'undefined' && CFG.isMobile ? 8 : 9}px monospace`;
+    ctx.textAlign = 'center'; 
+    ctx.textBaseline = 'middle'; 
+    const data = ts.data; if (!data || data.length === 0) return;
     const firstIdx = Math.max(0, Math.floor(vr.start)); const lastIdx = Math.min(data.length - 1, Math.ceil(vr.end));
     const first = data[firstIdx]; const last = data[lastIdx]; if (!first || !last) return;
-    const timeSpan = last.time - first.time; if (timeSpan <= 0) return; const pxPerMs = w / timeSpan; const TARGET_PX = 80;
+    const timeSpan = last.time - first.time; if (timeSpan <= 0) return; 
+    const pxPerMs = w / timeSpan; const TARGET_PX = 80;
     const intervals = [ 60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000, 60 * 60_000, 2 * 60 * 60_000, 4 * 60 * 60_000, 6 * 60 * 60_000, 12 * 60 * 60_000, 24 * 60 * 60_000, 7 * 24 * 60 * 60_000 ];
     let chosen = intervals[intervals.length - 1];
     for (const intv of intervals) { if (intv * pxPerMs >= TARGET_PX) { chosen = intv; break; } }
@@ -665,15 +861,22 @@ class TimeAxisRenderer {
       const px = Math.round(offsetPx + idx * stepPx) + 0.5;
       if (px < 24 || px > w - 20 || Math.abs(px - lx) < 55) continue;
       const c = candles[idx]; if (!c) continue; const d = new Date(c.time); const lb = this._formatTime(d, chosen);
-      ctx.fillStyle = '#4a6a8a'; ctx.fillText(lb, px, h / 2 + 1); lx = px;
+      // ✅ استخدام لون نص من الإعدادات
+      ctx.fillStyle = getColor('text', '#4a6a8a'); 
+      ctx.fillText(lb, px, h / 2 + 1); lx = px;
     }
     if (cx >= 0 && cx <= w && candles?.length > 0) {
       const idx = Math.round(ts.xToIndex(cx)); if (idx >= 0 && idx < candles.length) {
         const c = candles[idx]; if (c) {
           const pcx = Math.round(ts.indexToX(idx)) + 0.5; const d = new Date(c.time); const lb = this._formatTime(d, chosen);
-          ctx.fillStyle = '#060a12'; ctx.fillRect(pcx - 24, 2, 48, h - 4);
-          ctx.strokeStyle = '#8aaccc'; ctx.lineWidth = 1 / this.dpr; ctx.strokeRect(pcx - 23.5, 2.5, 47, h - 5);
-          ctx.fillStyle = '#e0ecff'; ctx.fillText(lb, pcx, h / 2 + 1);
+          // ✅ استخدام لون الخلفية من الإعدادات
+          ctx.fillStyle = getColor('bg', '#060a12'); 
+          ctx.fillRect(pcx - 24, 2, 48, h - 4);
+          ctx.strokeStyle = getColor('textBright', '#8aaccc'); 
+          ctx.lineWidth = 1 / this.dpr; 
+          ctx.strokeRect(pcx - 23.5, 2.5, 47, h - 5);
+          ctx.fillStyle = getColor('textWhite', '#e0ecff'); 
+          ctx.fillText(lb, pcx, h / 2 + 1);
         }
       }
     }
