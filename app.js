@@ -2,10 +2,13 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
- * APP - المحرك الرئيسي (النسخة النهائية الكاملة)
- * ✅ يدعم إضافة مؤشرات كملفات خارجية دون تعديل هذا الملف
- * ✅ يدعم النوافذ المنفصلة للمؤشرات (مثل LOWESS و RSI في أسفل الشارت)
- * ✅ يدعم سحب/تغيير ارتفاع أي نافذة منفصلة بالماوس أو اللمس
+ * APP - المحرك الرئيسي (النسخة المحسّنة والأكثر استقراراً)
+ * ✅ نظام كاش ذكي للمؤشرات مع معدل تحديث قابل للضبط
+ * ✅ توحيد نظام الألوان عبر CFG.colors في كل مكان
+ * ✅ تنعيم حركة النوافذ المنفصلة (Smoothing)
+ * ✅ تحسينات الموبايل: بطاقات أصغر، زوم أكثر استقراراً
+ * ✅ تحكم دقيق في موضع العداد التنازلي وإزالة التوهج
+ * ✅ تحسين وضوح الشموع عند التصغير الشديد
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -21,7 +24,19 @@ const AppHelpers = {
 if (typeof CFG === 'undefined') window.CFG = {};
 CFG.colors = CFG.colors || {};
 CFG.colors.timer = '#0072e4';
-CFG.colors.timerShadow = 'rgba(0,15,40,0.7)';
+CFG.colors.timerShadow = 'rgba(0, 0, 0, 0.7)';
+
+// ✅ إعدادات افتراضية إضافية للتحكم الدقيق
+if (!CFG.ui) CFG.ui = {};
+CFG.ui.timerOffsetX = CFG.ui.timerOffsetX || 45;
+CFG.ui.timerOffsetY = CFG.ui.timerOffsetY || 25;
+CFG.ui.enableTimerShadow = CFG.ui.enableTimerShadow !== false;
+CFG.ui.minZoomAlpha = CFG.ui.minZoomAlpha || 0.9;
+
+if (!CFG.zoom) CFG.zoom = {};
+CFG.zoom.pinchDamping = CFG.zoom.pinchDamping || 0.7;
+CFG.zoom.maxScalePerFrame = CFG.zoom.maxScalePerFrame || 0.15;
+CFG.zoom.disableInertiaDuringZoom = CFG.zoom.disableInertiaDuringZoom !== false;
 
 class App {
   constructor() {
@@ -38,6 +53,8 @@ class App {
         this._startDataFeed(); 
         this._startRenderLoop(); 
       });
+      // ✅ تسجيل واجهة التحكم العالمية
+      this._registerGlobalControls();
     } catch (err) {
       console.error('[App] Init failed:', err);
       this._showToast('فشل في التهيئة', 'down');
@@ -73,7 +90,6 @@ class App {
     this.feed = new DataFeed();
     this.inertia = new InertiaScroller(this.ts); 
     
-    // ✅ تمرير overlay-canvas لإصلاح رسم WebGL
     const overlayCanvas = document.getElementById('overlay-canvas');
     this.mainR = new ChartRenderer(this.mainCanvas, overlayCanvas);
     
@@ -83,13 +99,9 @@ class App {
 
   _initState() {
     this.candles = [];
-    // ✅ المؤشرات الثابتة (للتوافق مع الكود القديم)
     this.indicators = { ma: false, bb: false, vol: false, lowess: false, sr: false };
-    // ✅ المؤشرات المسجلة ديناميكياً
     this.registeredIndicators = {};
-    // ✅ دعم النوافذ المنفصلة للمؤشرات الديناميكية
     this.paneIndicators = {};
-    // ✅ دعم سحب/تغيير ارتفاع النوافذ المنفصلة الديناميكية
     this.draggablePanes = {};
     this.activeDragPaneId = null;
     this.dragStartY = 0;
@@ -110,40 +122,77 @@ class App {
     this.psLowess = new PriceScale();
     this._lowessPaneH = 150; 
     this._isDraggingPane = false;
-    
-    // ✅ لتتبع مستمعات الأحداث ومنع التسرب
     this._eventUnsubs = [];
+    
+    // ✅ جديد: نظام كاش المؤشرات مع معدل تحديث قابل للضبط
+    this.indicatorUpdateRate = 100; // مللي ثانية بين كل تحديث
+    this._lastIndicatorUpdate = 0;
+    this._indicatorCache = new Map();
+    this._indicatorCacheTTL = 5000; // صلاحية الكاش: 5 ثواني
+    
+    // ✅ جديد: قيم مُنعَّمة لارتفاعات النوافذ
+    this._smoothedLowessHeight = 150;
+    this._smoothedPaneHeights = new Map();
   }
 
-  // ✅ جديد: تهيئة المؤشرات المسجلة من IndicatorRegistry
+  // ✅ جديد: تسجيل واجهة التحكم العالمية
+  _registerGlobalControls() {
+    window.ChartControls = {
+      setIndicatorRate: (ms) => {
+        if (window.chartApp?.setIndicatorUpdateRate) {
+          window.chartApp.setIndicatorUpdateRate(ms);
+          return true;
+        }
+        return false;
+      },
+      setColors: (newColors) => {
+        if (CFG.colors) {
+          Object.assign(CFG.colors, newColors);
+          if (window.chartApp) window.chartApp.dirty = true;
+          return true;
+        }
+        return false;
+      },
+      setZoomLimits: (min, max) => {
+        CFG.minSpacing = min;
+        CFG.maxSpacing = max;
+        return true;
+      },
+      toggleTimerShadow: (enable) => {
+        CFG.ui.enableTimerShadow = enable;
+        if (window.chartApp) window.chartApp.dirty = true;
+        return true;
+      },
+      setTimerOffset: (x, y) => {
+        CFG.ui.timerOffsetX = x;
+        CFG.ui.timerOffsetY = y;
+        if (window.chartApp) window.chartApp.dirty = true;
+        return true;
+      }
+    };
+    console.log('[App] ✓ Global controls registered: window.ChartControls');
+  }
+
   _initRegisteredIndicators() {
     if (typeof window.IndicatorRegistry === 'undefined') {
       console.log('[App] IndicatorRegistry not found, dynamic indicators disabled');
       return;
     }
     
-    // نسخ المؤشرات المسجلة مسبقاً
     for (const [id, plugin] of Object.entries(window.IndicatorRegistry.plugins)) {
-      this.registeredIndicators[id] = { 
-        enabled: false, 
-        ...plugin 
-      };
-      // إنشاء أزرار للمؤشرات المسجلة مسبقاً
+      this.registeredIndicators[id] = { enabled: false, ...plugin };
       if (plugin.button?.label) {
         this._createIndicatorButton(id, plugin);
       }
     }
     
-    // تسجيل أن التطبيق جاهز لاستقبال مؤشرات جديدة
     window.IndicatorRegistry.markInitialized();
-    
     console.log(`[App] Loaded ${Object.keys(this.registeredIndicators).length} dynamic indicators`);
   }
 
   _initEventBus() {
     const safe = fn => { try { return fn(); } catch(e) { console.error('[App] EventBus:', e); } };
     
-    // ✅ حفظ دوال الإلغاء لمنع تسرب الذاكرة
     this._eventUnsubs.push(bus.on('candles:updated', c => safe(() => { 
       this.candles = c; 
       this.ts.setData(c); 
@@ -151,7 +200,8 @@ class App {
         this.ts.scrollToEnd(this.chartW); 
         this.firstLoad = false; 
       } 
-      this._cachedIndicators = null; 
+      this._cachedIndicators = null;
+      this._indicatorCache.clear(); // ✅ مسح كاش المؤشرات عند تحديث البيانات
       this.dirty = true; 
     })));
     
@@ -164,7 +214,7 @@ class App {
       const pct = d.change || 0; 
       const up = pct >= 0; 
       this.priceChange.textContent = `${up?'+':''}${pct.toFixed(2)}%`; 
-      this.priceChange.style.color = up ? (CFG?.colors?.up||'#00e676') : (CFG?.colors?.down||'#ff1744'); 
+      this.priceChange.style.color = up ? (CFG?.colors?.up||'#00fd0d') : (CFG?.colors?.down||'#ff0101'); 
       this.priceChange.style.background = up ? (CFG?.colors?.upDim||'rgba(0,230,118,0.18)') : (CFG?.colors?.downDim||'rgba(255,23,68,0.18)'); 
     })));
     
@@ -193,29 +243,27 @@ class App {
       this.candles=[]; 
       this.firstLoad=true; 
       this.dirty=true; 
-      // ✅ مسح الذاكرة المؤقتة عند إعادة التعيين
       this._cachedIndicators = null;
+      this._indicatorCache.clear(); // ✅ مسح الكاش عند إعادة التعيين
       if(this.loadingOverlay) this.loadingOverlay.style.display='flex'; 
     })));
     
-    // ✅ جديد: مستمع لتسجيل المؤشرات الديناميكية أثناء التشغيل
     this._eventUnsubs.push(bus.on('indicator:registered', ({ id, plugin }) => {
       this.registeredIndicators[id] = { enabled: false, ...plugin };
       this._createIndicatorButton(id, plugin);
       this._cachedIndicators = null;
+      this._indicatorCache.delete(id); // ✅ مسح كاش هذا المؤشر فقط
       this.dirty = true;
       console.log(`[App] ✓ Dynamic indicator registered: ${plugin.name || id}`);
     }));
   }
 
-  // ✅ جديد: إنشاء أزرار المؤشرات الديناميكية تلقائياً
   _createIndicatorButton(id, plugin) {
     if (!plugin?.button?.label) {
       console.warn(`[App] Indicator "${id}" missing button config, skipping UI`);
       return;
     }
     
-    // التحقق من عدم وجود الزر مسبقاً
     const existingBtn = document.getElementById(`btn-${id}`);
     if (existingBtn) return;
     
@@ -230,15 +278,14 @@ class App {
         this.registeredIndicators[id].enabled = !this.registeredIndicators[id].enabled;
         btn.classList.toggle('active', this.registeredIndicators[id].enabled);
         this._cachedIndicators = null;
+        this._indicatorCache.delete(id); // ✅ مسح كاش هذا المؤشر عند التبديل
         this.dirty = true;
         console.log(`[App] ${this.registeredIndicators[id].enabled ? '✓ Enabled' : '✗ Disabled'}: ${id}`);
       }
     });
     
-    // تحديد موضع الإدراج
     const toolbarGroup = document.querySelector('.toolbar-group:nth-child(2)');
     if (toolbarGroup) {
-      // إذا كان هناك موضع مفضل
       if (plugin.button.position === 'end') {
         toolbarGroup.appendChild(btn);
       } else if (plugin.button.position === 'after-vol' && this.btnVOL) {
@@ -246,7 +293,6 @@ class App {
       } else if (plugin.button.position === 'after-sr' && this.btnSR) {
         this.btnSR.after(btn);
       } else {
-        // الافتراضي: قبل الفاصل أو في النهاية
         const sep = toolbarGroup.querySelector('.tb-sep');
         if (sep) {
           sep.before(btn);
@@ -262,14 +308,11 @@ class App {
   _initEvents() {
     const mc = this.mainCanvas; if (!mc) return;
     
-    // ✅ دالة مساعدة: هل الماوس فوق فاصل نافذة؟
     const isOverPaneDivider = (mouseY) => {
-      // أولاً: تحقق من LOWESS
       if (this.indicators.lowess) {
-        const lowessTop = this.chartH - this._lowessPaneH;
+        const lowessTop = this.chartH - this._smoothedLowessHeight;
         if (Math.abs(mouseY - lowessTop) <= 8) return { type: 'lowess', topY: lowessTop };
       }
-      // ثانياً: تحقق من النوافذ الديناميكية
       for (const [id, pane] of Object.entries(this.paneIndicators)) {
         const plugin = this.registeredIndicators[id];
         if (plugin?.enabled && plugin.settings?.separatePane) {
@@ -287,7 +330,6 @@ class App {
       const r = mc.getBoundingClientRect(); 
       const mouseY = e.clientY - r.top;
       
-      // ✅ التحقق من فواصل النوافذ (LOWESS + ديناميكية)
       const divider = isOverPaneDivider(mouseY);
       if (divider) {
         this._isDraggingPane = true;
@@ -301,7 +343,6 @@ class App {
         return; 
       }
       
-      // السحب العادي للشارت
       this.drag = { active: true, lastX: e.clientX }; 
       this.inertia.stop(); 
       mc.style.cursor = 'grabbing'; 
@@ -313,23 +354,19 @@ class App {
       const mouseY = e.clientY - r.top;
       const mouseX = e.clientX - r.left;
       
-      // ✅ معالجة سحب فاصل النافذة
       if (this._isDraggingPane && this.activeDragPaneId) {
         const dy = mouseY - this.dragStartY;
         
         if (this.activeDragPaneId === 'lowess') {
-          // سحب LOWESS (الكود الأصلي)
           let newH = this.dragStartHeight - dy;
           newH = Math.max(50, Math.min(newH, this.chartH * 0.5));
           this._lowessPaneH = newH;
         } else {
-          // ✅ سحب نافذة ديناميكية
           const pane = this.paneIndicators[this.activeDragPaneId];
           if (pane) {
             let newH = this.dragStartHeight - dy;
             newH = Math.max(50, Math.min(newH, this.chartH * 0.5));
             pane.height = newH;
-            // تحديث إعدادات المؤشر للحفاظ على القيمة
             if (this.registeredIndicators[this.activeDragPaneId]?.settings?.paneHeight) {
               this.registeredIndicators[this.activeDragPaneId].settings.paneHeight.value = newH;
             }
@@ -339,7 +376,6 @@ class App {
         return;
       }
       
-      // ✅ تحديث مؤشر الماوس عند المرور فوق فاصل (للتغذية البصرية)
       const divider = isOverPaneDivider(mouseY);
       if (divider && !this.drag.active) {
         mc.style.cursor = 'row-resize';
@@ -347,10 +383,8 @@ class App {
         mc.style.cursor = 'crosshair';
       }
       
-      // تحديث crosshair
       this.crosshair = { x: mouseX, y: mouseY, active: true };
       
-      // السحب العادي للشارت
       if (this.drag.active) { 
         this.ts.scroll(e.clientX - this.drag.lastX, this.chartW); 
         this.drag.lastX = e.clientX; 
@@ -384,7 +418,6 @@ class App {
       this.dirty = true; 
     }, {passive: false});
 
-    // ✅ دعم اللمس للسحب (للموبايل)
     mc.addEventListener('touchstart', e => {
       e.preventDefault(); 
       this.inertia.stop(); 
@@ -394,7 +427,6 @@ class App {
         const touchY = t[0].clientY - r.top;
         const touchX = t[0].clientX - r.left;
         
-        // التحقق من فواصل النوافذ
         const divider = isOverPaneDivider(touchY);
         if (divider) {
           this._isDraggingPane = true;
@@ -460,15 +492,30 @@ class App {
         }
       }
       else if (t.length === 2 && this.pinch.active) { 
-        const nd = Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY), 
-              sc = nd / this.pinch.dist, 
-              ns = Math.max(1.5, Math.min(60, this.pinch.sp * sc)), 
-              cx = (t[0].clientX + t[1].clientX)/2 - r.left, 
-              ci = this.ts.xToIndex(this.pinch.cx); 
-        this.ts.spacing = ns; 
-        this.ts.offset = cx - ci * ns; 
-        this.pinch.dist = nd; 
-        this.pinch.sp = ns; 
+        const nd = Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY);
+        
+        // ✅ جديد: حدود للتغير في المقياس + تخفيف (Damping)
+        const maxScaleChange = CFG.zoom?.maxScalePerFrame || 0.15;
+        let rawScale = nd / this.pinch.dist;
+        rawScale = Math.max(1 - maxScaleChange, Math.min(1 + maxScaleChange, rawScale));
+        
+        const damping = CFG.zoom?.pinchDamping || 0.7;
+        const smoothedScale = 1 + (rawScale - 1) * damping;
+        
+        const ns = Math.max(CFG.minSpacing || 1.5, Math.min(CFG.maxSpacing || 60, this.pinch.sp * smoothedScale));
+        const cx = (t[0].clientX + t[1].clientX)/2 - r.left;
+        const ci = this.ts.xToIndex(this.pinch.cx);
+        
+        this.ts.spacing = ns;
+        this.ts.offset = cx - ci * ns;
+        
+        this.pinch.dist = nd;
+        this.pinch.sp = ns;
+        
+        // ✅ جديد: إيقاف القصور الذاتي أثناء الزوم
+        if (CFG.zoom?.disableInertiaDuringZoom && this.inertia?.isActive?.()) {
+          this.inertia.stop();
+        }
       }
       this.dirty = true;
     }, {passive: false});
@@ -480,7 +527,10 @@ class App {
         this.activeDragPaneId = null;
       }
       if (e.touches.length === 0) { 
-        if (this.drag.active) this.inertia.release(); 
+        // ✅ جديد: تفعيل القصور الذاتي فقط إذا لم يكن هناك زوم
+        if (this.drag.active && !this.pinch.active) {
+          this.inertia.release(); 
+        }
         this.drag.active = false; 
         this.pinch.active = false; 
         this.crosshair.active = false; 
@@ -505,7 +555,8 @@ class App {
       this.tfButtons.forEach(x=>x.classList.remove('active')); 
       b.classList.add('active'); 
       this.feed?.changeConfig?.(this.feed.symbol, b.dataset.tf); 
-      this._cachedIndicators = null; 
+      this._cachedIndicators = null;
+      this._indicatorCache.clear(); // ✅ مسح الكاش عند تغيير الإطار الزمني
       this.dirty = true; 
     }));
     
@@ -566,14 +617,20 @@ class App {
     } catch(e) { console.warn('[App] Resize:', e); }
   }
 
-  // ✅ محسّن: دمج حساب المؤشرات الثابتة والديناميكية
+  // ✅ محسّن: نظام كاش ذكي + معدل تحديث قابل للضبط
   _getIndicators() {
     const len = this.candles?.length || 0; 
     if(!len) return null;
     
-    // التحقق من الذاكرة المؤقتة
-    if(this._cachedIndicators?.len === len && this._cachedIndicators.flags === this._indFlags()) {
-      return this._cachedIndicators.values;
+    const now = performance.now();
+    const shouldRecalculate = (now - this._lastIndicatorUpdate) >= this.indicatorUpdateRate;
+    
+    // التحقق من الكاش العام
+    if(!shouldRecalculate && this._cachedIndicators?.len === len && this._cachedIndicators.flags === this._indFlags()) {
+      const cacheValid = Array.from(this._indicatorCache.entries()).every(([id, entry]) => 
+        now - entry.timestamp < this._indicatorCacheTTL
+      );
+      if(cacheValid) return this._cachedIndicators.values;
     }
     
     try {
@@ -581,7 +638,7 @@ class App {
             vols = this.candles.map(c=>c?.volume??0), 
             vals = {};
       
-      // ✅ حساب المؤشرات الثابتة (للتوافق)
+      // حساب المؤشرات الثابتة
       if(typeof Indicators !== 'undefined') {
         if(this.indicators.ma) { 
           vals.ma20 = Indicators.sma(closes,20); 
@@ -601,12 +658,26 @@ class App {
         }
       }
       
-      // ✅ جديد: حساب المؤشرات المسجلة ديناميكياً
+      // حساب المؤشرات الديناميكية مع الكاش الفردي
       if (Object.keys(this.registeredIndicators).length > 0) {
         for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
           if (plugin.enabled && typeof plugin.calculate === 'function') {
             try {
-              vals[id] = plugin.calculate(this.candles, plugin.settings || {});
+              // التحقق من كاش هذا المؤشر
+              const cached = this._indicatorCache.get(id);
+              if(cached && cached.len === len && now - cached.timestamp < this._indicatorCacheTTL) {
+                vals[id] = cached.data;
+                continue;
+              }
+              
+              // حساب جديد + تخزين
+              const result = plugin.calculate(this.candles, plugin.settings || {});
+              this._indicatorCache.set(id, { 
+                data: result, 
+                timestamp: now, 
+                len: len 
+              });
+              vals[id] = result;
             } catch (err) {
               console.error(`[App] Error calculating indicator "${id}":`, err);
               vals[id] = null;
@@ -614,6 +685,9 @@ class App {
           }
         }
       }
+      
+      // تحديث وقت آخر حساب
+      if(shouldRecalculate) this._lastIndicatorUpdate = now;
       
       this._cachedIndicators = { 
         len, 
@@ -629,12 +703,46 @@ class App {
   }
   
   _indFlags() { 
-    // إضافة حالة المؤشرات الديناميكية للذاكرة المؤقتة
     let dynamicFlags = '';
     for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
       dynamicFlags += `${id}:${plugin.enabled ? 1 : 0};`;
     }
     return `${this.indicators.ma}${this.indicators.bb}${this.indicators.vol}${this.indicators.lowess}${this.indicators.sr}|${dynamicFlags}`; 
+  }
+
+  // ✅ جديد: ضبط معدل تحديث المؤشرات
+  setIndicatorUpdateRate(rateMs) {
+    this.indicatorUpdateRate = Math.max(50, Math.min(1000, rateMs));
+    console.log(`[App] Indicator update rate set to ${this.indicatorUpdateRate}ms`);
+  }
+
+  // ✅ جديد: تنظيف الكاش عند الحاجة
+  _clearIndicatorCache() {
+    this._indicatorCache.clear();
+    this._cachedIndicators = null;
+    this._lastIndicatorUpdate = 0;
+  }
+
+  // ✅ جديد: تنعيم ارتفاعات النوافذ
+  _smoothPaneHeights() {
+    const smoothFactor = 0.15;
+    
+    // تنعيم LOWESS
+    if (this.indicators.lowess) {
+      this._smoothedLowessHeight += (this._lowessPaneH - this._smoothedLowessHeight) * smoothFactor;
+    }
+    
+    // تنعيم النوافذ الديناميكية
+    for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
+      if (plugin.enabled && plugin.settings?.separatePane) {
+        const targetH = plugin.settings.paneHeight?.value ?? plugin.settings.paneHeight ?? 120;
+        if (!this._smoothedPaneHeights.has(id)) {
+          this._smoothedPaneHeights.set(id, targetH);
+        }
+        const current = this._smoothedPaneHeights.get(id);
+        this._smoothedPaneHeights.set(id, current + (targetH - current) * smoothFactor);
+      }
+    }
   }
 
   _updateTimer() {
@@ -646,11 +754,11 @@ class App {
     const candleStart = Math.floor(last.time / duration) * duration;
     const remaining = (candleStart + duration) - now;
     
-    // حساب الارتفاعات مع دعم النوافذ المنفصلة الديناميكية
-    let totalPaneHeight = this.indicators.lowess ? this._lowessPaneH : 0;
+    // ✅ استخدام القيم المُنعَّمة لارتفاعات النوافذ
+    let totalPaneHeight = this.indicators.lowess ? this._smoothedLowessHeight : 0;
     for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
       if (plugin.enabled && plugin.settings?.separatePane) {
-        totalPaneHeight += plugin.settings.paneHeight?.value ?? plugin.settings.paneHeight ?? 120;
+        totalPaneHeight += this._smoothedPaneHeights.get(id) ?? (plugin.settings.paneHeight?.value ?? 120);
       }
     }
     const mainH = this.chartH - totalPaneHeight;
@@ -667,319 +775,384 @@ class App {
     const lastIdx = this.candles.length - 1;
     const lastX = this.ts.indexToX(lastIdx);
     const lastY = this.ps.priceToY(last.close, mainH);
-    let drawX = lastX + 20; let drawY = lastY - 12;
-    if (drawX + 55 > this.chartW - 8) drawX = lastX - 75;
-    if (drawY < 25) drawY = lastY + 25;
-    if (drawY > mainH - 25) drawY = mainH - 25;
+    
+    // ✅ استخدام إعدادات المسافة القابلة للتخصيص
+    const timerOffsetX = CFG.ui?.timerOffsetX || 45;
+    const timerOffsetY = CFG.ui?.timerOffsetY || 25;
+    let drawX = lastX + timerOffsetX; 
+    let drawY = lastY - timerOffsetY;
+    
+    // حدود ذكية مع مسافات أكبر
+    if (drawX + 70 > this.chartW - 10) drawX = lastX - 90;
+    if (drawY < 30) drawY = lastY + 35;
+    if (drawY > mainH - 30) drawY = mainH - 30;
     
     this.mainR.drawTimer(timeStr, drawX, drawY, CFG?.colors?.timer || '#4da6ff', 11);
     if (this.timerBadge) this.timerBadge.style.display = 'none';
   }
 
-  // ✅ محسّن: دعم رسم المؤشرات الديناميكية مع النوافذ المنفصلة
-  _render() {
-    try {
-      if(this.feed?.flushBuffer?.()) this.dirty = true;
-      if(!this.dirty && !this.inertia?.isActive()) { 
-        this._updateTimer(); 
-        this.rafId = requestAnimationFrame(()=>this._loop()); 
-        return; 
-      }
-      this.dirty = false;
-      if(!this.candles?.length) { 
-        this.mainR?.clear?.(); 
-        this.rafId = requestAnimationFrame(()=>this._loop()); 
-        return; 
-      }
-
-      const {chartW:w, ts, ps, candles} = this;
-      if(!ts||!ps) { 
-        this.rafId = requestAnimationFrame(()=>this._loop()); 
-        return; 
-      }
-      const vr = ts.getVisibleRange(w); 
-      
-      // ✅ حساب ارتفاعات النوافذ المنفصلة (للمؤشرات الثابتة والديناميكية)
-      let totalPaneHeight = 0;
-
-      // نافذة LOWESS الثابتة
-      if (this.indicators.lowess) {
-        totalPaneHeight += this._lowessPaneH;
-      }
-
-      // نوافذ المؤشرات الديناميكية التي تحتاج مساحة منفصلة
-      for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
-        if (plugin.enabled && plugin.settings?.separatePane) {
-          const paneH = plugin.settings.paneHeight?.value ?? plugin.settings.paneHeight ?? 120;
-          totalPaneHeight += paneH;
-          this.paneIndicators[id] = {
-            height: paneH,
-            ps: new PriceScale(), // مقياس منفصل لكل مؤشر
-            yOffset: 0 // سيتم حسابه لاحقاً
-          };
-        }
-      }
-
-      const mainH = this.chartH - totalPaneHeight;
-      let currentYOffset = mainH;
-
-      // تعيين إزاحات النوافذ (من الأعلى للأسفل)
-      for (const [id, pane] of Object.entries(this.paneIndicators)) {
-        pane.yOffset = currentYOffset;
-        currentYOffset += pane.height;
-      }
-      
-      ps.calculateRange(candles, vr.start, vr.end);
-      if(this.mainR.setRefs && !this._glRefsSet) { 
-        this.mainR.setRefs(ts,ps); 
-        this._glRefsSet = true; 
-      }
-
-      this.mainR?.clear?.();
-      this.mainR?.drawGrid?.(ps, ts, mainH);
-      
-      // ✅ رسم الحجم (VOL) باستخدام drawRects
-      if(this.indicators.vol) {
-        let mv = 0;
-        for (let i = vr.start; i <= vr.end; i++) { if(candles[i]?.volume > mv) mv = candles[i].volume; }
-        if(mv > 0) {
-          const volRects = [];
-          const vh = mainH * 0.15;
-          for (let i = vr.start; i <= vr.end; i++) {
-            const c = candles[i]; if(!c) continue;
-            const volH = Math.round((c.volume / mv) * vh);
-            const topPrice = ps.yToPrice(mainH - volH, mainH);
-            volRects.push({
-              x1Idx: i - 0.35, y1Price: topPrice,
-              x2Idx: i + 0.35, y2Price: ps.min,
-              color: c.close >= c.open ? 'rgba(0,230,118,0.3)' : 'rgba(255,23,68,0.3)'
-            });
-          }
-          this.mainR.drawRects(volRects, { ts, ps, chartH: mainH });
-        }
-      }
-      
-      const ind = this._getIndicators();
-      if(ind) {
-        // ✅ رسم البولينجر (BB) باستخدام drawArea + drawLine
-        if(this.indicators.bb) {
-          this.mainR.drawArea(ind.bb.upper, ind.bb.lower, 'rgba(33,150,243,0.04)', { ts, ps, chartH: mainH, strokeColor: 'rgba(100,181,246,0.6)', lineWidth: 1 });
-          this.mainR.drawLine(ind.bb.mid, 'rgba(100,181,246,0.8)', { ts, ps, chartH: mainH, lineWidth: 1 });
-        }
-        
-        // ✅ رسم الموفينج (MA) باستخدام drawLine
-        if(this.indicators.ma) { 
-          if(ind.ma20) this.mainR.drawLine(ind.ma20, CFG?.colors?.ma20||'#f9a825', { ts, ps, chartH: mainH });
-          if(ind.ma50) this.mainR.drawLine(ind.ma50, CFG?.colors?.ma50||'#7c4dff', { ts, ps, chartH: mainH });
-        }
-        
-        // ✅ رسم الدعم والمقاومة (SR) باستخدام drawRects + drawShapes
-        if(this.indicators.sr && ind.sr) {
-          const srRects = ind.sr.zones.map(z => ({
-            x1Idx: z.x1, y1Price: z.y1, x2Idx: z.x2, y2Price: z.y2,
-            color: z.color + '26', strokeColor: z.color + '80', dashed: true
-          }));
-          this.mainR.drawRects(srRects, { ts, ps, chartH: mainH });
-
-          const srShapes = ind.sr.markers.map(m => ({ type: m.type, idx: m.x, price: m.y, color: m.color }));
-          this.mainR.drawShapes(srShapes, { ts, ps, chartH: mainH });
-        }
-        
-        // ✅ جديد: رسم المؤشرات المسجلة ديناميكياً (مع دعم النوافذ المنفصلة)
-        if (Object.keys(this.registeredIndicators).length > 0) {
-          for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
-            if (plugin.enabled && plugin.render && ind[id] && typeof plugin.render === 'function') {
-              try {
-                // هل المؤشر يحتاج نافذة منفصلة؟
-                if (plugin.settings?.separatePane && this.paneIndicators[id]) {
-                  const pane = this.paneIndicators[id];
-                  // حساب مقياس السعر للنافذة المنفصلة (مثلاً 0-100 لـ RSI)
-                  const paneData = ind[id];
-                  if (paneData?.line) {
-                    // حساب المدى الفعلي للقيم في النافذة
-                    let minVal = Infinity, maxVal = -Infinity;
-                    for (let i = vr.start; i <= vr.end; i++) {
-                      if (paneData.line[i] != null) {
-                        if (paneData.line[i] < minVal) minVal = paneData.line[i];
-                        if (paneData.line[i] > maxVal) maxVal = paneData.line[i];
-                      }
-                    }
-                    if (isFinite(minVal) && isFinite(maxVal)) {
-                      const range = maxVal - minVal || 1;
-                      pane.ps.min = minVal - range * 0.1;
-                      pane.ps.max = maxVal + range * 0.1;
-                      if (pane.ps.max === pane.ps.min) {
-                        pane.ps.max = pane.ps.min + 1;
-                      }
-                    }
-                  }
-                  
-                  // استدعاء دالة الرسم مع إعدادات النافذة المنفصلة
-                  plugin.render(this.mainR, ts, pane.ps, pane.height, ind[id], plugin.settings || {}, {
-                    yOffset: pane.yOffset,
-                    isSeparatePane: true,
-                    paneId: id,
-                    crosshair: this.crosshair.active ? this.crosshair : null,
-                    candles: this.candles
-                  });
-                } else {
-                  // رسم عادي فوق الشموع
-                  plugin.render(this.mainR, ts, ps, mainH, ind[id], plugin.settings || {}, {
-                    yOffset: 0,
-                    isSeparatePane: false,
-                    crosshair: this.crosshair.active ? this.crosshair : null,
-                    candles: this.candles
-                  });
-                }
-              } catch (err) {
-                console.error(`[App] Error rendering indicator "${id}":`, err);
-              }
-            }
-          }
-        }
-      }
-      
-      // ✅ رسم الشموع (دقة الشموع كما هي تماماً بدون أي تعديل)
-      this.mainR?.drawCandles?.(candles, ts, ps, mainH);
-      
-      const last = candles[candles.length-1]; 
-      let isUp = false, priceStr = '';
-      if(last) { 
-        isUp = last.close >= last.open; 
-        priceStr = Utils ? Utils.fmtPrice(last.close) : last.close.toFixed(2); 
-        this.mainR?.drawPriceLine?.(last.close, isUp, ps, mainH); 
-      }
-
-      // ✅ رسم LOWESS بالبدائيات (يدعم النافذة السفلية والألوان الديناميكية)
-      if(this.indicators.lowess && ind?.lowess) {
-        const lowessData = ind.lowess;
-        let lo = Infinity, hi = -Infinity;
-        for(let i = vr.start; i <= vr.end; i++) {
-          const h2 = lowessData.channels.h2[i]; const l2 = lowessData.channels.l2[i];
-          if(h2 != null) { if(h2 > hi) hi = h2; if(h2 < lo) lo = h2; }
-          if(l2 != null) { if(l2 > hi) hi = l2; if(l2 < lo) lo = l2; }
-        }
-        if(isFinite(lo) && isFinite(hi)) {
-          const range = hi - lo; 
-          this.psLowess.min = lo - range * 0.05;
-          this.psLowess.max = hi + range * 0.05;
-          if(this.psLowess.max === this.psLowess.min) this.psLowess.max = this.psLowess.min + 1;
-        }
-        
-        const lowessOpts = { ts, ps: this.psLowess, chartH: this._lowessPaneH, yOffset: mainH };
-
-        // 1. التظليل بين 90 و 10
-        this.mainR.drawArea(lowessData.rsi.bounds.line90, lowessData.rsi.bounds.line10, 'rgba(192, 192, 192, 0.1)', lowessOpts);
-
-        // 2. خطوط القنوات والحدود
-        const staticL = [lowessData.channels.h2, lowessData.channels.h1, lowessData.channels.l1, lowessData.channels.l2];
-        for(const l of staticL) this.mainR.drawLine(l, lowessData.channels.color, { ...lowessOpts, lineWidth: 1 });
-        
-        const boundsL = [lowessData.rsi.bounds.line100, lowessData.rsi.bounds.line0, lowessData.rsi.bounds.line90, lowessData.rsi.bounds.line10];
-        for(const l of boundsL) this.mainR.drawLine(l, lowessData.rsi.bounds.color, { ...lowessOpts, lineWidth: 2 });
-
-        // 3. خط الوسط (ألوان ديناميكية)
-        const midColors = lowessData.channels.mid.map((v, i) => {
-          if(i < 3 || v == null || lowessData.channels.mid[i-3] == null) return null;
-          return v > lowessData.channels.mid[i-3] ? lowessData.channels.midColorUp : lowessData.channels.midColorDn;
-        });
-        this.mainR.drawLine(lowessData.channels.mid, midColors, { ...lowessOpts, lineWidth: 1, alpha: 0.9 });
-
-        // 4. خط RSI (ألوان ديناميكية)
-        this.mainR.drawLine(lowessData.rsi.line, lowessData.rsi.colors, { ...lowessOpts, lineWidth: 1.5 });
-
-        // 5. علامات الماس
-        const diamonds = [];
-        for(let i = 0; i < lowessData.markers.trendChanges.length; i++) {
-          if(lowessData.markers.trendChanges[i] != null && lowessData.channels.mid[i] != null) {
-            diamonds.push({ type: 'diamond', idx: i, price: lowessData.channels.mid[i], color: lowessData.markers.trendChanges[i] });
-          }
-        }
-        this.mainR.drawShapes(diamonds, lowessOpts);
-
-        // 6. خط فاصل أنيق
-        const sepRect = [{
-          x1Idx: vr.start, y1Price: this.psLowess.max,
-          x2Idx: vr.end, y2Price: this.psLowess.max - (this.psLowess.max - this.psLowess.min) * 0.002,
-          color: '#1e2d3d'
-        }];
-        this.mainR.drawRects(sepRect, lowessOpts);
-      }
-
-      if(this.crosshair.active && this.crosshair.x>=0 && this.crosshair.y>=0) { 
-        this.mainR?.drawCrosshair?.(this.crosshair.x, this.crosshair.y); 
-        this._updateCrosshairUI(ind); 
-      } else { 
-        if(this.xhairBox) this.xhairBox.style.display='none'; 
-        if(this.indicatorValues) this.indicatorValues.style.display='none'; 
-      }
-      
-      // ✅ تحديد مقياس السعر وارتفاع المحور بناءً على موضع الماوس
-      let axisPs = ps; 
-      let axisChartH = mainH; 
-      let relativeCrossY = -1;
-      
-      if (this.crosshair.active) {
-        relativeCrossY = this.crosshair.y;
-        
-        // التحقق من LOWесс أولاً
-        if (this.indicators.lowess && this.crosshair.y > mainH && this.crosshair.y <= mainH + this._lowessPaneH) {
-          axisPs = this.psLowess; 
-          axisChartH = this._lowessPaneH; 
-          relativeCrossY = this.crosshair.y - mainH; 
-        }
-        // ✅ التحقق من النوافذ المنفصلة الديناميكية
-        else {
-          for (const [id, pane] of Object.entries(this.paneIndicators)) {
-            const paneTop = pane.yOffset;
-            const paneBottom = paneTop + pane.height;
-            if (this.crosshair.y > paneTop && this.crosshair.y <= paneBottom) {
-              axisPs = pane.ps;
-              axisChartH = pane.height;
-              relativeCrossY = this.crosshair.y - paneTop;
-              break;
-            }
-          }
-        }
-      }
-      
-      const lastPriceForAxis = (this.indicators.lowess && this.crosshair.active && this.crosshair.y > mainH) ? -1 : (last?.close ?? -1);
-      this.priceR?.render?.(axisPs, axisChartH, relativeCrossY, lastPriceForAxis, isUp, priceStr);
-      this.timeR?.render?.(ts, candles, w, this.crosshair.active ? this.crosshair.x : -1);
-      this._updateTimer();
-      
-      // ✅ رسم خطوط فاصل مرئية للنوافذ المنفصلة الديناميكية
-      if (Object.keys(this.paneIndicators).length > 0) {
-        const ctx = this.mainCanvas.getContext('2d');
-        if (ctx) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(100, 120, 150, 0.5)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([4, 4]);
-          
-          for (const [id, pane] of Object.entries(this.paneIndicators)) {
-            const plugin = this.registeredIndicators[id];
-            if (plugin?.enabled && plugin.settings?.separatePane) {
-              const y = pane.yOffset + 0.5; // +0.5 لمحاذاة البكسل
-              ctx.beginPath();
-              ctx.moveTo(0, y);
-              ctx.lineTo(this.chartW, y);
-              ctx.stroke();
-            }
-          }
-          ctx.setLineDash([]);
-          ctx.restore();
-        }
-      }
-      
-    } catch(e) { 
-      console.error('[App] Render:', e); 
+  // ✅ محسّن للأداء: _render() مع إصلاح استقرار المقياس للمؤشرات الـ Overlay
+_render() {
+  try {
+    const bufferFlushed = this.feed?.flushBuffer?.() || false;
+    const isAnimating = this.inertia?.isActive() || false;
+    
+    // لا نعيد الرسم إذا لم يتغير شيء والنظام غير متحرك
+    if (!this.dirty && !bufferFlushed && !isAnimating) { 
+      this._updateTimer(); 
+      this.rafId = requestAnimationFrame(() => this._loop()); 
+      return; 
     }
     
-    this.rafId = requestAnimationFrame(()=>this._loop());
-    if(this.inertia?.isActive()) this.dirty = true;
+    // تنظيف حالة الشموع الفارغة بسرعة
+    if (!this.candles?.length) { 
+      this.mainR?.clear?.(); 
+      this.rafId = requestAnimationFrame(() => this._loop()); 
+      return; 
+    }
+    
+    this.dirty = false;
+
+    const { chartW: w, ts, ps, candles } = this;
+    if (!ts || !ps) { 
+      this.rafId = requestAnimationFrame(() => this._loop()); 
+      return; 
+    }
+    
+    const vr = ts.getVisibleRange(w); 
+    
+    // ✅ تطبيق التنعيم على ارتفاعات النوافذ
+    this._smoothPaneHeights();
+    
+    let totalPaneHeight = 0;
+    if (this.indicators.lowess) {
+      totalPaneHeight += this._smoothedLowessHeight;
+    }
+
+    for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
+      if (plugin.enabled && plugin.settings?.separatePane) {
+        const paneH = this._smoothedPaneHeights.get(id) ?? (plugin.settings.paneHeight?.value ?? 120);
+        totalPaneHeight += paneH;
+        if (!this.paneIndicators[id]) {
+          this.paneIndicators[id] = { height: paneH, ps: new PriceScale(), yOffset: 0 };
+        } else {
+          this.paneIndicators[id].height = paneH;
+        }
+      }
+    }
+
+    const mainH = this.chartH - totalPaneHeight;
+    let currentYOffset = mainH;
+
+    for (const [id, pane] of Object.entries(this.paneIndicators)) {
+      pane.yOffset = currentYOffset;
+      currentYOffset += pane.height;
+    }
+    
+    // ✅ حساب مقياس السعر الأساسي (على النطاق المرئي فقط)
+    ps.calculateRange(candles, vr.start, vr.end);
+    
+    // ✅ ✅ إصلاح مشكلة "قفز المقياس" للمؤشرات الـ Overlay
+    if (this._cachedIndicators?.values) {
+      const ind = this._cachedIndicators.values;
+      let hasOverlay = false;
+      
+      for (const pluginId in this.registeredIndicators) {
+        const plugin = this.registeredIndicators[pluginId];
+        const data = ind[pluginId];
+        
+        // ✅ فقط للمؤشرات المفعّلة التي تستخدم وضع Overlay ولديها نطاق
+        if (plugin?.enabled && plugin.settings?.overlayMode && data?.range) {
+          hasOverlay = true;
+          
+          // ✅ ✅ ميزة "النطاق المستقر": لا نغير المقياس إلا إذا تجاوز السعر حدوده
+          if (data.range.stable) {
+            const lastPrice = candles[candles.length - 1]?.close;
+            if (lastPrice == null) continue;
+            
+            const currentRange = ps.max - ps.min;
+            const buffer = currentRange * 0.05; // هامش 5%
+            
+            // نسمح بالتوسيع فقط إذا خرج السعر بشكل واضح عن النطاق
+            if (lastPrice < data.range.min - buffer) {
+              ps.min = data.range.min;
+            }
+            if (lastPrice > data.range.max + buffer) {
+              ps.max = data.range.max;
+            }
+            // وإلا: نحتفظ بالمقياس الحالي لمنع القفز
+          
+          } else {
+            // ✅ النطاق غير مستقر: نطبق تنعيماً تدريجياً للتغييرات
+            const smoothFactor = plugin.settings?.rangeSmoothFactor?.value ?? 0.1;
+            
+            if (data.range.min < ps.min) {
+              ps.min = ps.min + (data.range.min - ps.min) * smoothFactor;
+            }
+            if (data.range.max > ps.max) {
+              ps.max = ps.max + (data.range.max - ps.max) * smoothFactor;
+            }
+          }
+        }
+      }
+      
+      // ✅ إضافة هامش 5% فقط (بدلاً من 10%) لمنع التصاق الخطوط بالحواف
+      if (hasOverlay) {
+        const range = ps.max - ps.min;
+        if (range > 0 && range < 1e10) { // حماية من القيم غير المنطقية
+          const margin = range * 0.05;
+          ps.min -= margin;
+          ps.max += margin;
+        }
+      }
+    }
+    
+    if (this.mainR.setRefs && !this._glRefsSet) { 
+      this.mainR.setRefs(ts, ps); 
+      this._glRefsSet = true; 
+    }
+
+    this.mainR?.clear?.();
+    this.mainR?.drawGrid?.(ps, ts, mainH);
+    
+    // ✅ رسم الحجم
+    if (this.indicators.vol) {
+      let mv = 0;
+      for (let i = vr.start; i <= vr.end; i++) { 
+        if (candles[i]?.volume > mv) mv = candles[i].volume; 
+      }
+      if (mv > 0) {
+        const volRects = [];
+        const vh = mainH * 0.15;
+        for (let i = vr.start; i <= vr.end; i++) {
+          const c = candles[i]; 
+          if (!c) continue;
+          const volH = Math.round((c.volume / mv) * vh);
+          const topPrice = ps.yToPrice(mainH - volH, mainH);
+          volRects.push({
+            x1Idx: i - 0.35, y1Price: topPrice,
+            x2Idx: i + 0.35, y2Price: ps.min,
+            color: c.close >= c.open ? 'rgba(0,230,118,0.3)' : 'rgba(255,23,68,0.3)'
+          });
+        }
+        this.mainR.drawRects(volRects, { ts, ps, chartH: mainH });
+      }
+    }
+    
+    const ind = this._getIndicators();
+    if (ind) {
+      // ✅ رسم المؤشرات الثابتة
+      if (this.indicators.bb && ind.bb) {
+        this.mainR.drawArea(ind.bb.upper, ind.bb.lower, 'rgba(33,150,243,0.04)', { 
+          ts, ps, chartH: mainH, strokeColor: 'rgba(100,181,246,0.6)', lineWidth: 1 
+        });
+        this.mainR.drawLine(ind.bb.mid, 'rgba(100,181,246,0.8)', { ts, ps, chartH: mainH, lineWidth: 1 });
+      }
+      
+      if (this.indicators.ma) { 
+        if (ind.ma20) this.mainR.drawLine(ind.ma20, CFG?.colors?.ma20 || '#f9a825', { ts, ps, chartH: mainH });
+        if (ind.ma50) this.mainR.drawLine(ind.ma50, CFG?.colors?.ma50 || '#7c4dff', { ts, ps, chartH: mainH });
+      }
+      
+      if (this.indicators.sr && ind.sr) {
+        const srRects = ind.sr.zones.map(z => ({
+          x1Idx: z.x1, y1Price: z.y1, x2Idx: z.x2, y2Price: z.y2,
+          color: z.color + '26', strokeColor: z.color + '80', dashed: true
+        }));
+        this.mainR.drawRects(srRects, { ts, ps, chartH: mainH });
+        const srShapes = ind.sr.markers.map(m => ({ type: m.type, idx: m.x, price: m.y, color: m.color }));
+        this.mainR.drawShapes(srShapes, { ts, ps, chartH: mainH });
+      }
+      
+      // ✅ رسم المؤشرات الديناميكية
+      if (Object.keys(this.registeredIndicators).length > 0) {
+        for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
+          if (plugin.enabled && plugin.render && ind[id] && typeof plugin.render === 'function') {
+            try {
+              const isOverlayIndicator = plugin.settings?.overlayMode === true || 
+                                         plugin.settings?.isOverlay === true ||
+                                         !plugin.settings?.separatePane;
+              
+              if (plugin.settings?.separatePane && this.paneIndicators[id] && !isOverlayIndicator) {
+                // --- رسم في نافذة منفصلة ---
+                const pane = this.paneIndicators[id];
+                const paneData = ind[id];
+                
+                if (paneData?.line) {
+                  let minVal = Infinity, maxVal = -Infinity;
+                  for (let i = vr.start; i <= vr.end; i++) {
+                    if (paneData.line[i] != null) {
+                      if (paneData.line[i] < minVal) minVal = paneData.line[i];
+                      if (paneData.line[i] > maxVal) maxVal = paneData.line[i];
+                    }
+                  }
+                  if (isFinite(minVal) && isFinite(maxVal)) {
+                    const range = maxVal - minVal || 1;
+                    if (Math.abs(pane.ps.min - minVal) > 0.01 || Math.abs(pane.ps.max - maxVal) > 0.01) {
+                      pane.ps.min = minVal - range * 0.1;
+                      pane.ps.max = maxVal + range * 0.1;
+                      if (pane.ps.max === pane.ps.min) pane.ps.max = pane.ps.min + 1;
+                    }
+                  }
+                }
+                
+                plugin.render(this.mainR, ts, pane.ps, pane.height, ind[id], plugin.settings || {}, {
+                  yOffset: pane.yOffset,
+                  isSeparatePane: true,
+                  paneId: id,
+                  crosshair: this.crosshair.active ? this.crosshair : null,
+                  candles: this.candles
+                });
+              } else {
+                // --- رسم كـ Overlay فوق الشموع ---
+                plugin.render(this.mainR, ts, ps, mainH, ind[id], plugin.settings || {}, {
+                  yOffset: 0,
+                  isSeparatePane: false,
+                  isOverlay: true,
+                  clipY: mainH,
+                  crosshair: this.crosshair.active ? this.crosshair : null,
+                  candles: this.candles
+                });
+              }
+            } catch (err) {
+              console.error(`[App] Error rendering indicator "${id}":`, err);
+            }
+          }
+        }
+      }
+    }
+    
+    // ✅ رسم الشموع (أخيراً، لضمان ظهورها فوق المؤشرات الخلفية)
+    this.mainR?.drawCandles?.(candles, ts, ps, mainH);
+    
+    const last = candles[candles.length - 1]; 
+    let isUp = false, priceStr = '';
+    if (last) { 
+      isUp = last.close >= last.open; 
+      priceStr = Utils ? Utils.fmtPrice(last.close) : last.close.toFixed(2); 
+      this.mainR?.drawPriceLine?.(last.close, isUp, ps, mainH); 
+    }
+
+    // ✅ رسم LOWESS الثابت (إذا مفعّل)
+    if (this.indicators.lowess && ind?.lowess) {
+      const lowessData = ind.lowess;
+      let lo = Infinity, hi = -Infinity;
+      for (let i = vr.start; i <= vr.end; i++) {
+        const h2 = lowessData.channels.h2[i]; const l2 = lowessData.channels.l2[i];
+        if (h2 != null) { if (h2 > hi) hi = h2; if (h2 < lo) lo = h2; }
+        if (l2 != null) { if (l2 > hi) hi = l2; if (l2 < lo) lo = l2; }
+      }
+      if (isFinite(lo) && isFinite(hi)) {
+        const range = hi - lo; 
+        this.psLowess.min = lo - range * 0.05;
+        this.psLowess.max = hi + range * 0.05;
+        if (this.psLowess.max === this.psLowess.min) this.psLowess.max = this.psLowess.min + 1;
+      }
+      
+      const lowessOpts = { ts, ps: this.psLowess, chartH: this._smoothedLowessHeight, yOffset: mainH };
+      this.mainR.drawArea(lowessData.rsi.bounds.line90, lowessData.rsi.bounds.line10, 'rgba(192, 192, 192, 0.1)', lowessOpts);
+      
+      const staticL = [lowessData.channels.h2, lowessData.channels.h1, lowessData.channels.l1, lowessData.channels.l2];
+      for (const l of staticL) this.mainR.drawLine(l, lowessData.channels.color, { ...lowessOpts, lineWidth: 1 });
+      
+      const boundsL = [lowessData.rsi.bounds.line100, lowessData.rsi.bounds.line0, lowessData.rsi.bounds.line90, lowessData.rsi.bounds.line10];
+      for (const l of boundsL) this.mainR.drawLine(l, lowessData.rsi.bounds.color, { ...lowessOpts, lineWidth: 2 });
+
+      const midColors = lowessData.channels.mid.map((v, i) => {
+        if (i < 3 || v == null || lowessData.channels.mid[i-3] == null) return null;
+        return v > lowessData.channels.mid[i-3] ? lowessData.channels.midColorUp : lowessData.channels.midColorDn;
+      });
+      this.mainR.drawLine(lowessData.channels.mid, midColors, { ...lowessOpts, lineWidth: 1, alpha: 0.9 });
+      this.mainR.drawLine(lowessData.rsi.line, lowessData.rsi.colors, { ...lowessOpts, lineWidth: 1.5 });
+
+      const diamonds = [];
+      for (let i = 0; i < lowessData.markers.trendChanges.length; i++) {
+        if (lowessData.markers.trendChanges[i] != null && lowessData.channels.mid[i] != null) {
+          diamonds.push({ type: 'diamond', idx: i, price: lowessData.channels.mid[i], color: lowessData.markers.trendChanges[i] });
+        }
+      }
+      this.mainR.drawShapes(diamonds, lowessOpts);
+
+      const sepRect = [{
+        x1Idx: vr.start, y1Price: this.psLowess.max,
+        x2Idx: vr.end, y2Price: this.psLowess.max - (this.psLowess.max - this.psLowess.min) * 0.002,
+        color: '#1e2d3d'
+      }];
+      this.mainR.drawRects(sepRect, lowessOpts);
+    }
+
+    // ✅ تحديث Crosshair UI
+    if (this.crosshair.active && this.crosshair.x >= 0 && this.crosshair.y >= 0) { 
+      this.mainR?.drawCrosshair?.(this.crosshair.x, this.crosshair.y); 
+      this._updateCrosshairUI(ind); 
+    } else { 
+      if (this.xhairBox) this.xhairBox.style.display = 'none'; 
+      if (this.indicatorValues) this.indicatorValues.style.display = 'none'; 
+    }
+    
+    // ✅ تحديد مقياس السعر للمحور بناءً على موضع الماوس
+    let axisPs = ps; 
+    let axisChartH = mainH; 
+    let relativeCrossY = -1;
+    
+    if (this.crosshair.active) {
+      relativeCrossY = this.crosshair.y;
+      if (this.indicators.lowess && this.crosshair.y > mainH && this.crosshair.y <= mainH + this._smoothedLowessHeight) {
+        axisPs = this.psLowess; 
+        axisChartH = this._smoothedLowessHeight; 
+        relativeCrossY = this.crosshair.y - mainH; 
+      } else {
+        for (const [id, pane] of Object.entries(this.paneIndicators)) {
+          const paneTop = pane.yOffset;
+          const paneBottom = paneTop + pane.height;
+          if (this.crosshair.y > paneTop && this.crosshair.y <= paneBottom) {
+            axisPs = pane.ps;
+            axisChartH = pane.height;
+            relativeCrossY = this.crosshair.y - paneTop;
+            break;
+          }
+        }
+      }
+    }
+    
+    const lastPriceForAxis = (this.indicators.lowess && this.crosshair.active && this.crosshair.y > mainH) ? -1 : (last?.close ?? -1);
+    this.priceR?.render?.(axisPs, axisChartH, relativeCrossY, lastPriceForAxis, isUp, priceStr);
+    this.timeR?.render?.(ts, candles, w, this.crosshair.active ? this.crosshair.x : -1);
+    this._updateTimer();
+    
+    // ✅ رسم خطوط فاصل النوافذ المنفصلة
+    if (Object.keys(this.paneIndicators).length > 0) {
+      const ctx = this.mainCanvas.getContext('2d');
+      if (ctx) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(100, 120, 150, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        
+        for (const [id, pane] of Object.entries(this.paneIndicators)) {
+          const plugin = this.registeredIndicators[id];
+          if (plugin?.enabled && plugin.settings?.separatePane) {
+            const y = pane.yOffset + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(this.chartW, y);
+            ctx.stroke();
+          }
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
+    
+  } catch (e) { 
+    console.error('[App] Render:', e); 
   }
- 
+  
+  // ✅ حلقة الرسم التالية مع requestAnimationFrame
+  this.rafId = requestAnimationFrame(() => this._loop());
+  if (this.inertia?.isActive()) this.dirty = true;
+}
+  
   _startRenderLoop() { 
     this._loop = ()=>this._render(); 
     this._loop(); 
@@ -991,7 +1164,7 @@ class App {
       this.priceDisplay.textContent = AppHelpers.fmtPrice(p); 
       const pr = parseFloat(this.priceDisplay.dataset.last||0); 
       const up = p >= pr; 
-      this.priceDisplay.style.color = up ? (CFG?.colors?.up||'#00e676') : (CFG?.colors?.down||'#ff1744'); 
+      this.priceDisplay.style.color = up ? (CFG?.colors?.up||'#13e600') : (CFG?.colors?.down||'#ff0000'); 
       this.priceDisplay.dataset.last = p; 
     } catch(e) {} 
   }
@@ -1008,7 +1181,6 @@ class App {
     } catch(e) {} 
   }
   
-  // ✅ محسّن: دعم عرض قيم المؤشرات الديناميكية في صندوق المعلومات
   _updateCrosshairUI(ind) {
     if(!this.xhairBox || !this.ts) {
       if(this.xhairBox) this.xhairBox.style.display = 'none';
@@ -1030,36 +1202,37 @@ class App {
             ts = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`, 
             chg = ((c.close - c.open) / c.open * 100).toFixed(2);
       
-      this.xhairBox.innerHTML = `<div class="xh-row"><span>O: ${AppHelpers.fmtPrice(c.open)}</span><span>H: ${AppHelpers.fmtPrice(c.high)}</span></div><div class="xh-row"><span>L: ${AppHelpers.fmtPrice(c.low)}</span><span>C: <b class="${up?'up':'down'}">${AppHelpers.fmtPrice(c.close)}</b></span></div><div class="xh-row" style="margin-top:4px;color:var(--text-bright);font-size:10px;"><span>${up?'+':''}${chg}%</span><span style="margin-left:auto">${ts}</span></div>`;
-      this.xhairBox.style.display = 'block';
-      
-      if(ind && this.indicatorValues) { 
-        let h = ''; 
+      // ✅ تحسين عرض الموبايل: معلومات مختصرة
+      if (CFG.isMobile) {
+        this.xhairBox.innerHTML = `<div class="xh-row"><span>C: <b class="${up?'up':'down'}">${AppHelpers.fmtPrice(c.close)}</b></span><span style="margin-right:8px">${ts}</span></div>`;
+        if (this.indicatorValues) this.indicatorValues.style.display = 'none';
+      } else {
+        this.xhairBox.innerHTML = `<div class="xh-row"><span>O: ${AppHelpers.fmtPrice(c.open)}</span><span>H: ${AppHelpers.fmtPrice(c.high)}</span></div><div class="xh-row"><span>L: ${AppHelpers.fmtPrice(c.low)}</span><span>C: <b class="${up?'up':'down'}">${AppHelpers.fmtPrice(c.close)}</b></span></div><div class="xh-row" style="margin-top:4px;color:var(--text-bright);font-size:10px;"><span>${up?'+':''}${chg}%</span><span style="margin-left:auto">${ts}</span></div>`;
         
-        // المؤشرات الثابتة
-        if(ind.ma20?.[idx] != null) h += `<span style="color:${CFG?.colors?.ma20||'#f9a825'}">MA20: ${AppHelpers.fmtPrice(ind.ma20[idx])}</span> &nbsp; `; 
-        if(ind.ma50?.[idx] != null) h += `<span style="color:${CFG?.colors?.ma50||'#7c4dff'}">MA50: ${AppHelpers.fmtPrice(ind.ma50[idx])}</span> &nbsp; `; 
-        if(ind.bb?.upper?.[idx] != null) h += `<span style="color:#64b5f6">BB: ${AppHelpers.fmtPrice(ind.bb.upper[idx])} / ${AppHelpers.fmtPrice(ind.bb.lower[idx])}</span>`;
-        
-        // ✅ جديد: قيم المؤشرات الديناميكية
-        if (Object.keys(this.registeredIndicators).length > 0) {
-          for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
-            if (plugin.enabled && ind[id] && typeof plugin.getTooltip === 'function') {
-              const tooltip = plugin.getTooltip(idx, ind[id], this.candles);
-              if (tooltip) {
-                h += ` &nbsp; ${tooltip}`;
+        if(ind && this.indicatorValues) { 
+          let h = ''; 
+          if(ind.ma20?.[idx] != null) h += `<span style="color:${CFG?.colors?.ma20||'#f9a825'}">MA20: ${AppHelpers.fmtPrice(ind.ma20[idx])}</span> &nbsp; `; 
+          if(ind.ma50?.[idx] != null) h += `<span style="color:${CFG?.colors?.ma50||'#7c4dff'}">MA50: ${AppHelpers.fmtPrice(ind.ma50[idx])}</span> &nbsp; `; 
+          if(ind.bb?.upper?.[idx] != null) h += `<span style="color:#64b5f6">BB: ${AppHelpers.fmtPrice(ind.bb.upper[idx])} / ${AppHelpers.fmtPrice(ind.bb.lower[idx])}</span>`;
+          
+          if (Object.keys(this.registeredIndicators).length > 0) {
+            for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
+              if (plugin.enabled && ind[id] && typeof plugin.getTooltip === 'function') {
+                const tooltip = plugin.getTooltip(idx, ind[id], this.candles);
+                if (tooltip) h += ` &nbsp; ${tooltip}`;
               }
             }
           }
+          
+          if(h) {
+            this.indicatorValues.innerHTML = h;
+            this.indicatorValues.style.display = 'block';
+          } else {
+            this.indicatorValues.style.display = 'none';
+          } 
         }
-        
-        if(h) {
-          this.indicatorValues.innerHTML = h;
-          this.indicatorValues.style.display = 'block';
-        } else {
-          this.indicatorValues.style.display = 'none';
-        } 
       }
+      this.xhairBox.style.display = 'block';
     } catch(e) {
       if(this.xhairBox) this.xhairBox.style.display = 'none';
     }
@@ -1088,22 +1261,13 @@ class App {
     } 
   }
   
-  // ✅ محسّن: تنظيف شامل لمنع تسرب الذاكرة
   destroy() { 
     try { 
-      // إيقاف حلقة الرسم
       if(this.rafId) cancelAnimationFrame(this.rafId);
-      
-      // إيقاف القصور الذاتي
       this.inertia?.stop?.();
-      
-      // تدمير الريندر
       this.mainR?.destroy?.();
-      
-      // تدمير مصدر البيانات
       this.feed?.destroy?.();
       
-      // ✅ إلغاء اشتراكات EventBus لمنع التسرب
       if (this._eventUnsubs) {
         this._eventUnsubs.forEach(unsub => {
           try { unsub?.(); } catch(e) {}
@@ -1111,7 +1275,6 @@ class App {
         this._eventUnsubs = [];
       }
       
-      // ✅ تنظيف المؤشرات الديناميكية
       for (const [id, plugin] of Object.entries(this.registeredIndicators)) {
         if (plugin.destroy && typeof plugin.destroy === 'function') {
           try { plugin.destroy(); } catch(e) {}
@@ -1122,7 +1285,6 @@ class App {
       this.draggablePanes = {};
       this.activeDragPaneId = null;
       
-      // تنظيف الواجهة
       if(this.alertContainer) this.alertContainer.innerHTML = ''; 
       if(this.timerBadge) this.timerBadge.style.display = 'none'; 
       if(bus && bus._listeners) bus._listeners = {};
