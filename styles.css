@@ -4,6 +4,7 @@
    ⚠️ ملاحظة: هذا الملف يُنسّق فقط عناصر HTML (الأزرار، الشريط، الحاويات، التنبيهات)
    ✅ لا يحتوي على أي قواعد تؤثر على <canvas> أو عناصر الرسم الداخلية
    ✅ جميع ألوان الشارت تُدار برمجياً عبر CFG.colors
+   ✅ ✅ تحسينات الموبايل: بطاقات أصغر، مسافات أفضل، منع التكبير غير المرغوب
 */
 
 :root {
@@ -25,6 +26,11 @@
   --axis-price-w: 72px;
   --axis-time-h: 28px;
   --toolbar-h: 48px;
+  
+  /* ✅ جديد: أبعاد البطاقات العائمة */
+  --card-max-width: 280px;
+  --card-padding: 8px;
+  --card-font-size: 11px;
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -43,6 +49,10 @@ html {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  /* ✅ منع التكبير/التصغير باللمس المزدوج على الموبايل */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
 }
 
 body {
@@ -53,13 +63,15 @@ body {
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', 'Courier New', monospace, system-ui;
+  font-family: 'JetBrains Mono', 'Courier New', monospace, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   
   /* تخطيط مرن: شريط فوق، شارت تحت */
   display: flex;
   flex-direction: column;
+  /* ✅ منع سحب الصفحة على الموبايل */
+  overscroll-behavior: none;
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -75,9 +87,14 @@ body {
   border-bottom: 1px solid var(--bg-secondary);
   gap: 8px;
   flex-wrap: nowrap;
-  flex-shrink: 0; /* منع انكماش الشريط */
+  flex-shrink: 0;
   user-select: none;
   z-index: 100;
+  /* ✅ منع تحديد النص */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .toolbar-group {
@@ -108,10 +125,15 @@ body {
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.05s;
   white-space: nowrap;
   line-height: 1;
   flex-shrink: 0;
+  /* ✅ تحسين اللمس على الموبايل */
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tb-btn:hover { 
@@ -191,7 +213,7 @@ body {
 /* ─────────────────────────────────────────────────────────────────── */
 #chart-layout {
   flex: 1 1 auto;
-  min-height: 0; /* مهم جداً: يسمح للـ flex child بالتقلص */
+  min-height: 0;
   width: 100%;
   position: relative;
   overflow: hidden;
@@ -219,9 +241,14 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  touch-action: none; /* يمنع التمرير الافتراضي للمتصفح */
+  touch-action: none;
   background: var(--bg-primary);
   cursor: crosshair;
+  /* ✅ منع تحديد المحتوى داخل منطقة الرسم */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 /* كانفاس الرسم الرئيسي */
@@ -233,6 +260,9 @@ body {
   top: 0;
   left: 0;
   touch-action: none;
+  /* ✅ تحسين الحدة على شاشات عالية الدقة */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 /* محور السعر (يمين) */
@@ -300,6 +330,9 @@ body {
   display: none;
   border-radius: 0 0 0 2px;
   white-space: nowrap;
+  /* ✅ خلفية شبه شفافة لتحسين القراءة */
+  background: rgba(6, 10, 18, 0.9);
+  border: 1px solid var(--bg-secondary);
 }
 
 #price-label.up { 
@@ -312,15 +345,16 @@ body {
   border-left: 3px solid var(--down); 
 }
 
+/* ✅ ✅ تحسينات البطاقات العائمة (#xhair-box و #indicator-values) */
 #xhair-box, #indicator-values {
   position: absolute;
   left: 12px;
   top: 12px;
   background: rgba(15, 28, 46, 0.95);
   border: 1px solid var(--bg-secondary);
-  padding: 6px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: var(--card-padding);
+  border-radius: 6px;
+  font-size: var(--card-font-size);
   line-height: 1.4;
   pointer-events: none;
   display: none;
@@ -328,15 +362,23 @@ body {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   white-space: nowrap;
-  max-width: calc(100% - 24px);
+  /* ✅ حدود قصوى لمنع البطاقة من أن تصبح كبيرة جداً */
+  max-width: var(--card-max-width);
+  width: auto;
+  /* ✅ منع الخروج عن حدود الشاشة */
+  box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* ✅ ظل خفيف لفصل البطاقة عن الخلفية */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 #indicator-values {
   top: auto;
   bottom: calc(var(--axis-time-h) + 12px);
   left: 12px;
+  /* ✅ نفس الحدود القصوى */
+  max-width: var(--card-max-width);
 }
 
 .xh-row { 
@@ -373,6 +415,8 @@ body {
   gap: 8px;
   pointer-events: none;
   max-width: 90vw;
+  padding: 0 12px;
+  box-sizing: border-box;
 }
 
 .alert-toast {
@@ -389,7 +433,10 @@ body {
   pointer-events: auto;
   border-left: 3px solid var(--accent);
   max-width: 320px;
+  width: 100%;
   word-wrap: break-word;
+  /* ✅ تحسين القراءة على الشاشات الصغيرة */
+  text-align: center;
 }
 
 .alert-toast.up { border-left-color: var(--up); }
@@ -451,74 +498,196 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
-/* تحسينات الموبايل */
+/* ✅ ✅ تحسينات الموبايل المُحسّنة */
 /* ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   :root {
-    --axis-price-w: 64px;
-    --axis-time-h: 26px;
-    --toolbar-h: 44px;
+    --axis-price-w: 56px;      /* ✅ أصغر لمحور السعر */
+    --axis-time-h: 24px;       /* ✅ أصغر لمحور الوقت */
+    --toolbar-h: 40px;         /* ✅ شريط أدوات أنحف */
+    --card-max-width: 90vw;    /* ✅ البطاقات تأخذ 90% من عرض الشاشة */
+    --card-padding: 6px;       /* ✅ حشو أقل للبطاقات */
+    --card-font-size: 9px;     /* ✅ خط أصغر للبطاقات */
+  }
+  
+  body {
+    /* ✅ منع التكبير باللمس المزدوج */
+    -webkit-text-size-adjust: 100%;
   }
   
   #toolbar {
-    padding: 0 6px;
+    padding: 0 4px;
     height: var(--toolbar-h);
     min-height: var(--toolbar-h);
     flex-wrap: wrap;
     gap: 2px;
+    /* ✅ منع التمرير الأفقي للشريط */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  #toolbar::-webkit-scrollbar {
+    display: none;
   }
   
   .toolbar-group {
     gap: 2px;
+    flex-shrink: 0;
   }
   
   .tb-sep {
-    height: 20px;
-    margin: 0 4px;
+    height: 18px;
+    margin: 0 3px;
   }
   
   .tb-btn {
-    padding: 4px 8px;
-    font-size: 10px;
-    min-width: 32px;
+    padding: 4px 7px;
+    font-size: 9px;
+    min-width: 28px;
+    min-height: 28px;
+    /* ✅ أزرار أصغر وأكثر ملاءمة للمس */
+    border-radius: 3px;
   }
   
   .price-info { 
-    font-size: 11px; 
-    gap: 4px;
+    font-size: 10px; 
+    gap: 3px;
   }
   
   #price-change {
     padding: 1px 4px;
-    font-size: 10px;
+    font-size: 9px;
   }
   
   .connection-status {
-    font-size: 10px;
-    gap: 4px;
+    font-size: 9px;
+    gap: 3px;
+  }
+  
+  .live-dot {
+    width: 6px;
+    height: 6px;
   }
   
   #price-label { 
     right: calc(var(--axis-price-w) + 1px); 
-    font-size: 10px; 
-    padding: 1px 6px;
+    font-size: 9px; 
+    padding: 1px 5px;
   }
   
+  /* ✅ ✅ تحسينات البطاقات على الموبايل */
   #xhair-box, #indicator-values {
-    font-size: 10px;
-    padding: 4px 6px;
+    font-size: var(--card-font-size);
+    padding: var(--card-padding);
     left: 8px;
+    right: 8px;              /* ✅ تحديد من الجانبين */
     top: 8px;
+    /* ✅ منع الخروج عن الشاشة */
+    max-width: calc(100vw - 16px);
+    width: auto;
+    /* ✅ ضمان عدم تجاوز المحتوى */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* ✅ ظل أخف على الموبايل */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   }
   
   #indicator-values {
     bottom: calc(var(--axis-time-h) + 8px);
+    left: 8px;
+    right: 8px;
+    max-width: calc(100vw - 16px);
+  }
+  
+  /* ✅ إخفاء قيم المؤشرات التفصيلية على الموبايل لتوفير مساحة */
+  #indicator-values {
+    display: none !important;
+  }
+  
+  /* ✅ إظهار قيم المؤشرات فقط عند اللمس الطويل (اختياري) */
+  /* يمكن تفعيلها عبر إضافة كلاس .show-indicators للجسم */
+  body.show-indicators #indicator-values {
+    display: block !important;
+  }
+  
+  .xh-row { 
+    gap: 4px; 
+    margin: 1px 0; 
   }
   
   /* تحسين منطقة اللمس للموبايل */
   #main-canvas-area {
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
+    /* ✅ منع سحب الصفحة أثناء التفاعل مع الشارت */
+    overscroll-behavior: contain;
+  }
+  
+  /* ✅ تحسين التنبيهات على الموبايل */
+  #alert-container {
+    bottom: 12px;
+    padding: 0 8px;
+  }
+  
+  .alert-toast {
+    font-size: 11px;
+    padding: 8px 12px;
+    max-width: 100%;
+    text-align: center;
+  }
+  
+  /* ✅ تحسين شاشة التحميل على الموبايل */
+  .loader-ring {
+    width: 32px;
+    height: 32px;
+    border-width: 2px;
+  }
+  
+  #loading-text {
+    font-size: 12px;
+    margin-top: 12px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* ✅ تحسينات إضافية للشاشات الصغيرة جداً (أقل من 400بكسل) */
+/* ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  :root {
+    --axis-price-w: 48px;
+    --axis-time-h: 22px;
+    --toolbar-h: 36px;
+    --card-font-size: 8px;
+    --card-padding: 4px;
+  }
+  
+  .tb-btn {
+    padding: 3px 6px;
+    font-size: 8px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+  
+  .price-info {
+    font-size: 9px;
+  }
+  
+  #price-change {
+    font-size: 8px;
+    padding: 1px 3px;
+  }
+  
+  .connection-status {
+    font-size: 8px;
+  }
+  
+  #xhair-box {
+    font-size: 8px;
+    padding: 4px;
   }
 }
 
@@ -529,6 +698,7 @@ body {
   canvas {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
+    image-rendering: pixelated;
   }
 }
 
@@ -542,7 +712,8 @@ body {
 /* ─────────────────────────────────────────────────────────────────── */
 /* منع تحديد النص على عناصر التفاعل */
 /* ─────────────────────────────────────────────────────────────────── */
-#toolbar, .tb-btn, #main-canvas-area, #price-axis-canvas, #time-axis-area {
+#toolbar, .tb-btn, #main-canvas-area, #price-axis-canvas, #time-axis-area,
+#xhair-box, #indicator-values, #price-label {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
@@ -558,6 +729,7 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -577,5 +749,51 @@ body {
   canvas {
     max-width: 100%;
     height: auto !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* ✅ تحسينات إضافية للتجربة العامة */
+/* ─────────────────────────────────────────────────────────────────── */
+
+/* ✅ تمرير أفقي سلس لشريط الأدوات على الموبايل */
+#toolbar {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ✅ تأثير hover خفيف للأزرار */
+.tb-btn {
+  will-change: transform, background, color;
+}
+
+/* ✅ تحسين استجابة اللمس */
+@supports (-webkit-touch-callout: none) {
+  .tb-btn {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ✅ منع الوميض عند اللمس على أندرويد */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ✅ تحسين أداء الرسوم المتحركة */
+@keyframes toast-in {
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* ✅ ضمان ظهور البطاقات فوق كل العناصر */
+#xhair-box, #indicator-values, #price-label {
+  contain: layout style paint;
+}
+
+/* ✅ تحسين قراءة النصوص الصغيرة */
+@media (max-width: 768px) {
+  .xh-val {
+    font-weight: 700;
   }
 }
