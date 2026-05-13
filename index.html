@@ -5,106 +5,212 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#060a12">
-  <title>Ultra Pro Trading Chart</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="msapplication-TileColor" content="#060a12">
+  <meta name="description" content="Ultra Pro Trading Chart - منصة تداول احترافية مع إشارات ذكية">
+  <meta name="keywords" content="تداول، شارت، باينانس، إشارات، تحليل فني">
+  <meta name="author" content="Ultra Pro Trading">
+  <meta name="robots" content="index, follow">
   
-  <!-- تحسينات الحدة والأداء -->
+  <!-- Open Graph -->
+  <meta property="og:title" content="Ultra Pro Trading Chart">
+  <meta property="og:description" content="منصة تداول احترافية مع إشارات ذكية">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ar_AR">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Ultra Pro Trading Chart">
+  
+  <title>Ultra Pro Trading Chart | تداول احترافي</title>
+  
+  <!-- أيقونات -->
+  <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  <link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  
+  <!-- ✅ أنماط منفصلة -->
+  <link rel="stylesheet" href="chart-styles.css">
+  <link rel="stylesheet" href="ui-styles.css">
+  
+  <!-- تحسينات الأداء المضمنة -->
   <style>
-    * { -webkit-font-smoothing: antialiased !important; -moz-osx-font-smoothing: grayscale !important; }
-    canvas {
-      image-rendering: pixelated !important;
-      image-rendering: crisp-edges !important;
-      will-change: transform;
-      transform: translateZ(0);
-    }
+    * { -webkit-font-smoothing: antialiased !important; -moz-osx-font-smoothing: grayscale !important; text-rendering: optimizeLegibility !important; }
+    canvas { image-rendering: pixelated !important; image-rendering: crisp-edges !important; image-rendering: -webkit-optimize-contrast !important; will-change: transform; transform: translateZ(0); backface-visibility: hidden; }
+    #main-canvas, #overlay-canvas { opacity: 0; transition: opacity 0.2s ease; }
+    #main-canvas.loaded, #overlay-canvas.loaded { opacity: 1; }
+    @media (hover: none) and (pointer: coarse) { * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; } }
+    @supports (padding: env(safe-area-inset-top)) { body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); } }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    .loading { pointer-events: none; opacity: 0.7; }
+    @media print { #toolbar, #settings-panel, #loading-overlay, #alert-container { display: none !important; } #chart-layout { position: static !important; height: auto !important; } }
   </style>
+  
+  <!-- معالجة الأخطاء -->
+  <script>
+    window.addEventListener('error', function(e) { console.error('[Error]', e.message, e.filename + ':' + e.lineno); if (document.getElementById('loading-text')) document.getElementById('loading-text').textContent = '⚠️ خطأ: ' + e.message; });
+    window.addEventListener('unhandledrejection', function(e) { console.error('[Unhandled]', e.reason); });
+    (function checkRequirements() {
+      const required = ['fetch', 'Promise', 'WebSocket', 'CanvasRenderingContext2D', 'localStorage', 'requestAnimationFrame'];
+      const missing = required.filter(f => !(f in window));
+      if (missing.length > 0) {
+        document.addEventListener('DOMContentLoaded', function() {
+          document.body.innerHTML = '<div style="padding:20px;color:#ff1744;font-family:monospace;text-align:center"><h2>❌ متصفح غير مدعوم</h2><p>يرجى استخدام: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+</p><p style="font-size:11px;opacity:0.7">المفقود: ' + missing.join(', ') + '</p></div>';
+        });
+      }
+    })();
+  </script>
 </head>
-<body>
 
+<body>
+  <!-- تنبيهات -->
+  <div id="alert-container" aria-live="polite" aria-atomic="true"></div>
+  
   <!-- شريط الأدوات -->
-  <header id="toolbar" dir="rtl">
-    <div class="toolbar-group">
-      <button id="symbol-btn" class="tb-btn primary">BTC/USDT</button>
-      <div class="tb-sep"></div>
-      <button class="tb-btn active" data-tf="1m">1m</button>
-      <button class="tb-btn" data-tf="5m">5m</button>
-      <button class="tb-btn" data-tf="15m">15m</button>
-      <button class="tb-btn" data-tf="1h">1h</button>
-      <button class="tb-btn" data-tf="4h">4h</button>
-      <button class="tb-btn" data-tf="1d">1D</button>
+  <header id="toolbar" dir="rtl" role="toolbar" aria-label="شريط أدوات التداول">
+    <div class="toolbar-group" role="group" aria-label="اختيار الزوج">
+      <!-- ✅ رمز صالح افتراضياً -->
+      <button id="symbol-btn" class="tb-btn primary" aria-label="الرمز الحالي" aria-haspopup="listbox">BTC/USDT</button>
+      <div id="symbol-search" role="search">
+        <span id="symbol-search-icon" aria-hidden="true">🔍</span>
+        <input type="text" id="symbol-search-input" placeholder="ابحث عن زوج..." aria-label="البحث عن زوج تداول" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div id="symbol-list" class="symbol-dropdown" role="listbox" aria-label="نتائج البحث"></div>
+      </div>
     </div>
-    <div class="toolbar-group">
-      <button id="btn-ma" class="tb-btn indicator">MA</button>
-      <button id="btn-bb" class="tb-btn indicator">BB</button>
-      <button id="btn-vol" class="tb-btn indicator">VOL</button>
-      <!-- ✅ زر تشغيل مؤشر LOWESS RSI-2 -->
-      <button id="btn-lowess" class="tb-btn indicator">LOWESS</button>
-      <!-- ✅ زر تشغيل مؤشر الدعم والمقاومة -->
-      <button id="btn-sr" class="tb-btn indicator">SR</button>
+    <div class="tb-sep" aria-hidden="true"></div>
+    <div class="toolbar-group" role="group" aria-label="الإطار الزمني">
+      <button class="tb-btn active" data-tf="1m" aria-pressed="true">1m</button>
+      <button class="tb-btn" data-tf="5m" aria-pressed="false">5m</button>
+      <button class="tb-btn" data-tf="15m" aria-pressed="false">15m</button>
+      <button class="tb-btn" data-tf="1h" aria-pressed="false">1h</button>
+      <button class="tb-btn" data-tf="4h" aria-pressed="false">4h</button>
+      <button class="tb-btn" data-tf="1d" aria-pressed="false">1D</button>
     </div>
-    <div class="toolbar-spacer"></div>
-    <div class="price-info" dir="ltr">
-      <span id="current-price">—</span>
-      <span id="price-change">—</span>
+    <div class="tb-sep" aria-hidden="true"></div>
+    <div class="toolbar-group" role="group" aria-label="المؤشرات الفنية">
+      <button id="btn-ma" class="tb-btn indicator" aria-pressed="false">MA</button>
+      <button id="btn-bb" class="tb-btn indicator" aria-pressed="false">BB</button>
+      <button id="btn-vol" class="tb-btn indicator" aria-pressed="false">VOL</button>
+      <button id="btn-lowess" class="tb-btn indicator" aria-pressed="false">LOWESS</button>
+      <button id="btn-sr" class="tb-btn indicator" aria-pressed="false">SR</button>
+      <button id="btn-indicators" class="tb-btn" aria-label="المزيد من المؤشرات" aria-haspopup="true" aria-expanded="false" aria-controls="indicators-dropdown">📊 ▼</button>
+      <div id="indicators-dropdown" class="dropdown" role="menu" aria-label="قائمة المؤشرات الإضافية" hidden></div>
     </div>
-    <div class="tb-sep"></div>
-    <div class="connection-status" dir="ltr">
-      <span id="live-dot" class="live-dot"></span>
-      <span id="conn-text">...</span>
+    <div class="toolbar-spacer" aria-hidden="true"></div>
+    <div class="price-info" dir="ltr" role="status" aria-live="polite">
+      <span id="current-price" aria-label="السعر الحالي">—</span>
+      <span id="price-change" aria-label="نسبة التغير">—</span>
     </div>
+    <div class="tb-sep" aria-hidden="true"></div>
+    <div class="connection-status" dir="ltr" role="status" aria-live="polite">
+      <span id="live-dot" class="live-dot" aria-hidden="true"></span>
+      <span id="conn-text" aria-label="حالة الاتصال">...</span>
+    </div>
+    <button id="btn-settings" class="tb-btn" title="الإعدادات" aria-label="فتح لوحة الإعدادات" aria-haspopup="dialog" aria-controls="settings-panel" aria-expanded="false">⚙️</button>
   </header>
 
   <!-- منطقة الشارت -->
-  <main id="chart-layout" dir="ltr">
+  <main id="chart-layout" dir="ltr" role="main" aria-label="منطقة الرسم البياني">
+    <div id="chart-background" aria-hidden="true"></div>
     <div id="canvas-wrapper" dir="ltr">
-      <div id="main-canvas-area" style="position: relative;">
-        <!-- كانفاس الشارت الرئيسي -->
-        <canvas id="main-canvas"></canvas>
-        <!-- ✅ كانفاس الطبقة الشفاف (Overlay) ضروري جداً للمؤشرات في وضع WebGL -->
-        <canvas id="overlay-canvas" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
-        <div id="price-label"></div>
-        <div id="xhair-box"></div>
-        <div id="indicator-values"></div>
-        <div id="alert-container"></div>
+      <div id="main-canvas-area" style="position: relative;" role="application" aria-label="منطقة الشارت التفاعلية" tabindex="0">
+        <canvas id="main-canvas" aria-label="الرسم البياني للأسعار" role="img"></canvas>
+        <canvas id="overlay-canvas" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;" aria-hidden="true"></canvas>
+        <div id="price-label" aria-live="polite" aria-atomic="true"></div>
+        <div id="xhair-box" aria-live="polite" aria-atomic="true"></div>
+        <div id="indicator-values" aria-live="polite" aria-atomic="true"></div>
       </div>
-      <canvas id="price-axis-canvas"></canvas>
+      <canvas id="price-axis-canvas" aria-label="محور الأسعار" role="img"></canvas>
       <div id="time-axis-area">
-        <canvas id="time-axis-canvas"></canvas>
-        <div id="axis-corner"></div>
+        <canvas id="time-axis-canvas" aria-label="محور الوقت" role="img"></canvas>
+        <div id="axis-corner" aria-hidden="true"></div>
       </div>
     </div>
   </main>
 
+  <!-- لوحة الإعدادات -->
+  <aside id="settings-panel" aria-label="لوحة إعدادات الشارت" role="dialog" aria-modal="true" hidden>
+    <div class="settings-section">
+      <div class="settings-title" id="candle-colors-title">🎨 ألوان الشموع</div>
+      <div class="setting-row"><span class="setting-label">جسم صعود</span><input type="color" class="color-picker" data-setting="candle.up.body" value="#00e676" aria-labelledby="candle-colors-title"></div>
+      <div class="setting-row"><span class="setting-label">ذيل صعود</span><input type="color" class="color-picker" data-setting="candle.up.wick" value="#00c853" aria-labelledby="candle-colors-title"></div>
+      <div class="setting-row"><span class="setting-label">جسم هبوط</span><input type="color" class="color-picker" data-setting="candle.down.body" value="#ff1744" aria-labelledby="candle-colors-title"></div>
+      <div class="setting-row"><span class="setting-label">ذيل هبوط</span><input type="color" class="color-picker" data-setting="candle.down.wick" value="#d50000" aria-labelledby="candle-colors-title"></div>
+      <div class="setting-row"><span class="setting-label">شفافية</span><input type="range" class="setting-slider" data-setting="candle.up.alpha" min="0.1" max="1" step="0.05" value="1" aria-label="شفافية الشموع"><span class="setting-value" id="candle-up-alpha-value" aria-live="polite">100%</span></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title" id="background-title">🖼️ خلفية الشارت</div>
+      <div class="setting-row"><span class="setting-label">صورة خلفية</span><input type="file" id="bg-image-input" accept="image/*" style="display:none" aria-label="اختر صورة للخلفية"><button class="tb-btn" onclick="document.getElementById('bg-image-input').click()" style="padding:4px 8px;font-size:10px;" aria-label="اختر صورة للخلفية">اختر صورة</button></div>
+      <div class="setting-row"><span class="setting-label">شفافية الصورة</span><input type="range" class="setting-slider" data-setting="background.alpha" min="0" max="0.3" step="0.01" value="0.15" aria-label="شفافية صورة الخلفية"><span class="setting-value" id="background-alpha-value" aria-live="polite">15%</span></div>
+      <div class="setting-row"><span class="setting-label">حجم الصورة</span><select class="tb-btn" id="bg-size-select" style="padding:4px 8px;font-size:10px;cursor:pointer;" aria-label="حجم صورة الخلفية"><option value="cover">ملء الشاشة</option><option value="contain">احتواء</option><option value="auto">أصلي</option></select></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title" id="guidelines-title">📏 خطوط الدليل</div>
+      <div class="setting-row"><span class="setting-label">فواصل كل 5 دقائق</span><div class="toggle-switch active" data-setting="showGuideLines.time5m" role="switch" aria-checked="true" tabindex="0" aria-labelledby="guidelines-title"></div></div>
+      <div class="setting-row"><span class="setting-label">فواصل كل ساعة</span><div class="toggle-switch active" data-setting="showGuideLines.time1h" role="switch" aria-checked="true" tabindex="0" aria-labelledby="guidelines-title"></div></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title" id="general-title">⚙️ عام</div>
+      <div class="setting-row"><span class="setting-label">توهج العداد</span><div class="toggle-switch active" data-setting="enableTimerShadow" role="switch" aria-checked="true" tabindex="0" aria-labelledby="general-title"></div></div>
+      <div class="setting-row"><span class="setting-label">إظهار الإشارات</span><div class="toggle-switch active" id="toggle-signals" role="switch" aria-checked="true" tabindex="0" aria-labelledby="general-title"></div></div>
+    </div>
+  </aside>
+
   <!-- شاشة التحميل -->
-  <div id="loading-overlay">
-    <div class="loader-ring"></div>
+  <div id="loading-overlay" role="status" aria-live="assertive" aria-busy="true">
+    <div class="loader-ring" aria-hidden="true"></div>
     <div id="loading-text">جارٍ التحميل...</div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text-secondary)" aria-hidden="true">Ultra Pro Trading Chart v2.0</div>
   </div>
 
-  <!-- عنصر مساعد للعداد التنازلي (يُدار برمجياً) -->
-  <div id="timer-badge" style="display:none;"></div>
+  <div id="timer-badge" style="display:none;" aria-hidden="true"></div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- تحميل الملفات الأساسية بترتيب اعتماديات صحيح (لا تغير الترتيب) -->
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ✅ تحميل الملفات بالترتيب الصحيح (فقط الملفات الموجودة) -->
   <script src="config.js"></script>
-  <script src="data-feed.js"></script>
+  <script src="event-bus.js"></script>
   <script src="indicators.js"></script>
-  <script src="renderer.js"></script>
+  <script src="renderer.js"></script>        <!-- ← ✅ صحيح: بدون s -->
+  <script src="data-feed.js"></script>
+  <script src="app.js"></script>              <!-- ← ✅ هذا هو المحرك الرئيسي -->
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- ✅ مساحة إضافة المؤشرات المستقلة (ملف لكل مؤشر) -->
-  <!-- ✅ لا تحتاج لتعديل أي ملف آخر، فقط أضف سطر <script> هنا لكل مؤشر جديد -->
-  <!-- ✅ سيظهر الزر تلقائياً في الشريط العلوي ويعمل فوراً -->
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- <script src="my-awesome-indicator.js"></script> -->
-  <!-- <script src="another-custom-indicator.js"></script> -->
-   
-  <script src="my-ema.js"></script> 
-  <script src="my-rsi-pane.js"></script>
-  <!-- الملف الرئيسي (يُحمل أخيراً لتهيئة الواجهة وربط كل المكونات) -->
-  <script src="app.js"></script>
-
+  <!-- سكريبتات التحسين -->
+  <script>
+    window.addEventListener('load', function() {
+      const loading = document.getElementById('loading-overlay');
+      if (loading) { loading.classList.add('hidden'); setTimeout(() => { loading.style.display = 'none'; }, 300); }
+      ['main-canvas', 'overlay-canvas'].forEach(id => { const c = document.getElementById(id); if (c) c.classList.add('loaded'); });
+      if (window.performance?.timing) console.log(`[App] ✓ Loaded in ${performance.timing.loadEventEnd - performance.timing.navigationStart}ms`);
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        ['indicators-dropdown', 'symbol-list', 'settings-panel'].forEach(id => { const el = document.getElementById(id); if (el?.classList.contains('show')) { el.classList.remove('show'); el.hidden = true; } });
+        const ca = document.getElementById('main-canvas-area'); if (ca) ca.focus();
+      }
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+      const ca = document.getElementById('main-canvas-area');
+      if (ca) { ca.tabIndex = 0; ca.addEventListener('focus', function() { this.setAttribute('aria-activedescendant', 'main-canvas'); }); }
+      document.querySelectorAll('.toggle-switch').forEach(t => t.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); } }));
+    });
+    console.group('🚀 Ultra Pro Trading Chart');
+    console.log('Version: 2.0.0 | Browser:', navigator.userAgent);
+    console.log('Screen:', screen.width + 'x' + screen.height, '@' + window.devicePixelRatio + 'x');
+    console.log('Touch:', 'ontouchstart' in window);
+    console.groupEnd();
+  </script>
+  
+  <!-- فالبك للأخطاء -->
+  <script>
+    setTimeout(function() {
+      if (typeof window.chartApp === 'undefined') {
+        const loading = document.getElementById('loading-overlay'), text = document.getElementById('loading-text');
+        if (loading && text) { loading.style.display = 'flex'; text.innerHTML = '⚠️ تعذر التحميل<br><small style="opacity:0.7">تحقق من الملفات أو حدّث الصفحة</small>'; }
+        console.error('[App] Failed to initialize');
+      }
+    }, 10000);
+  </script>
 </body>
 </html>
