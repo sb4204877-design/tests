@@ -3,15 +3,16 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════
  * ULTRA RENDERER ENGINE - محرك الرسم الشامل (النسخة عالية الدقة - High Precision)
- * ✅ الإصدار: 3.2.1 | الأداء: أقصى | الدقة: بكسل-لبكسل | المرونة: كاملة
+ * ✅ الإصدار: 3.2.2 | الأداء: أقصى | الدقة: بكسل-لبكسل | المرونة: كاملة
  * 
  * 🎯 الميزات الجديدة:
  * • 🎨 ColorCache: كاش ذكي لتحليل الألوان (يمنع اختناق المعالج @60fps)
  * • 📐 PrecisionUtils: دعم الإحداثيات العشرية للرسم الدقيق عند التكبير الشديد
- * • ✨ Dynamic Smoothing: تفعيل التنعيم للخطوط المائلة فقط
+ * • ✨ Dynamic Smoothing: تفعيل التنعيم للخطوط المائلة فقط (لا للشموع!)
  * • 🔧 Snap-for-Stroke: تقريب ذكي للخطوط 1بكسل لمنع الضبابية
  * • 🖼️ Retina-Ready: ضبط DPR تلقائي مع الحفاظ على وحدات الـ CSS
  * • 🚀 Grid Optimized: شبكة محسّنة بحدود قصوى لمنع الثقل عند الفريمات الكبيرة
+ * • 🕯️ Candle Sharpness: إصلاح ضبابية الشموع (تعطيل التنعيم + تقريب صحيح)
  * 
  * 📦 التصدير: { ChartRenderer, Canvas2DRenderer, TimeScale, PriceScale, ... }
  * ═══════════════════════════════════════════════════════════════════════
@@ -211,8 +212,8 @@ function drawText(ctx, text, x, y, options = {}) {
 function candleMetrics(index, ts) {
   const stepPx = ts.spacing;
   const offsetPx = ts.offset;
+  // ✅ لا نقرب المركز هنا، نتركه كـ float للرسم النهائي
   const centerX = offsetPx + index * stepPx;
-  const centerXSnap = Math.round(centerX);
   
   let bodyWidth, alpha;
   if (stepPx >= 12) { bodyWidth = Math.max(4, Math.floor(stepPx * 0.75)); alpha = 1.0; }
@@ -223,8 +224,11 @@ function candleMetrics(index, ts) {
   
   const halfBody = Math.floor(bodyWidth / 2);
   return {
-    centerX: centerXSnap, bodyLeft: centerXSnap - halfBody, bodyRight: centerXSnap + halfBody,
-    bodyWidth, alpha
+    centerX, // ✅ نرجع float، التقريب في الرسم
+    bodyLeft: centerX - halfBody, 
+    bodyRight: centerX + halfBody,
+    bodyWidth, 
+    alpha
   };
 }
 
@@ -304,10 +308,11 @@ class Canvas2DRenderer {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     
     // ✅ تحسينات السياق للرسم عالي الدقة
-    this.ctx.imageSmoothingEnabled = true;   // نفعّله افتراضياً للخطوط الناعمة
-    this.ctx.imageSmoothingQuality = 'high'; // إذا مدعوم
-    this.ctx.lineCap = 'round';              // نهايات ناعمة للخطوط
-    this.ctx.lineJoin = 'round';             // زوايا ناعمة
+    // ✅ غيّر الافتراضي إلى false (أفضل للرسوم الهندسية والشموع)
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.imageSmoothingQuality = 'high';
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
     
     // تنظيف الكاش عند تغيير الحجم
     this._gridCache = { key: null, lines: [], timestamp: 0 };
@@ -339,7 +344,6 @@ class Canvas2DRenderer {
         const range = ps.max - ps.min;
         for (let i = 0; i <= 6; i++) {
           const price = ps.min + (range / 6) * i;
-          // ✅ استخدام priceToYFloat إذا توفر، مع snapForStroke للرسم النهائي
           const yFloat = ps.priceToYFloat ? ps.priceToYFloat(price, chartH) : ps.priceToY(price, chartH);
           const y = typeof PrecisionUtils !== 'undefined' 
             ? PrecisionUtils.snapForStroke(yFloat, 1) 
@@ -350,7 +354,7 @@ class Canvas2DRenderer {
     }
   }
   
-  // ─── الشموع ───────────────────────────────────────────────────────
+  // ─── 🕯️ الشموع - مُحسّنة لحواف حادة وواضحة (بدون ضبابية) ──────────
   
   drawCandles(candles, ts, ps, chartH) {
     const { ctx, w } = this;
@@ -360,6 +364,10 @@ class Canvas2DRenderer {
     const downCfg = candleCfg.down || {};
     const globalAlpha = CFG?.colors?.globalAlpha ?? 1.0;
     
+    // ✅ تعطيل التنعيم للشموع (لحواف حادة وواضحة)
+    const originalSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    
     batchDraw(ctx, (ctx) => {
       for (let i = vr.start; i <= vr.end; i++) {
         const c = candles[i];
@@ -368,63 +376,62 @@ class Canvas2DRenderer {
         const metrics = candleMetrics(i, ts);
         if (!isCandleVisible(metrics, w, ts.spacing)) continue;
         
-        // ✅ استخدام Float للإحداثيات العمودية (بدون تقريب مبكر)
-        const yHFloat = ps.priceToYFloat ? ps.priceToYFloat(c.high, chartH) : ps.priceToY(c.high, chartH);
-        const yLFloat = ps.priceToYFloat ? ps.priceToYFloat(c.low, chartH) : ps.priceToY(c.low, chartH);
-        const yOFloat = ps.priceToYFloat ? ps.priceToYFloat(c.open, chartH) : ps.priceToY(c.open, chartH);
-        const yCFloat = ps.priceToYFloat ? ps.priceToYFloat(c.close, chartH) : ps.priceToY(c.close, chartH);
+        // ✅ تحويل الأسعار إلى إحداثيات عمودية (بدون تقريب مبكر)
+        const yH = ps.priceToYFloat ? ps.priceToYFloat(c.high, chartH) : ps.priceToY(c.high, chartH);
+        const yL = ps.priceToYFloat ? ps.priceToYFloat(c.low, chartH) : ps.priceToY(c.low, chartH);
+        const yO = ps.priceToYFloat ? ps.priceToYFloat(c.open, chartH) : ps.priceToY(c.open, chartH);
+        const yC = ps.priceToYFloat ? ps.priceToYFloat(c.close, chartH) : ps.priceToY(c.close, chartH);
         
         const isUp = c.close >= c.open;
         const cfg = isUp ? upCfg : downCfg;
         
-        // ✅ كاش الألوان للأداء
+        // ✅ كاش الألوان
         const bodyColor = ColorCache.parse(cfg.body || getColor(isUp ? 'up' : 'down'), cfg.alpha ?? globalAlpha);
         const wickColor = ColorCache.parse(cfg.wick || cfg.body || getColor(isUp ? 'up' : 'down'), cfg.alpha ?? globalAlpha);
         const borderColor = cfg.border ? ColorCache.parse(cfg.border, cfg.alpha ?? globalAlpha) : null;
         
-        // ✅ رسم الذيل بإحداثيات دقيقة + snapForStroke للخط 1بكسل
-        const centerX = metrics.centerX; // candleMetrics تُرجع قيمة مُقرّبة بالفعل
+        // ✅ مركز الشمعة: تقريب صحيح للخط العمودي 1بكسل
+        const centerX = Math.round(metrics.centerX) + 0.5;
+        
+        // ── رسم الذيل (خط عمودي 1بكسل) ──
         ctx.strokeStyle = wickColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        const yH = typeof PrecisionUtils !== 'undefined' 
-          ? PrecisionUtils.snapForStroke(yHFloat, 1) 
-          : Math.round(yHFloat) + 0.5;
-        const yL = typeof PrecisionUtils !== 'undefined' 
-          ? PrecisionUtils.snapForStroke(yLFloat, 1) 
-          : Math.round(yLFloat) + 0.5;
-        ctx.moveTo(centerX + 0.5, yH);
-        ctx.lineTo(centerX + 0.5, yL);
+        // ✅ +0.5 للخطوط 1بكسل فقط، مع تقريب الإحداثيات أولاً
+        ctx.moveTo(centerX, Math.round(yH) + 0.5);
+        ctx.lineTo(centerX, Math.round(yL) + 0.5);
         ctx.stroke();
         
-        // ✅ رسم الجسم
+        // ── رسم الجسم (مستطيل مملوء) ──
         if (metrics.bodyWidth >= 1) {
-          const bodyTop = Math.min(yOFloat, yCFloat);
-          const bodyHeight = Math.max(1, Math.abs(yCFloat - yOFloat));
-          ctx.fillStyle = bodyColor;
-          
-          // تقريب إحداثيات الجسم للرسم الحاد (الأجسام تُرسم كمستطيلات مملوءة)
+          // ✅ للأجسام المملوءة: تقريب عادي بدون +0.5
           const bodyLeft = Math.round(metrics.bodyLeft);
-          const snappedTop = typeof PrecisionUtils !== 'undefined' 
-            ? PrecisionUtils.snapForStroke(bodyTop, 1) 
-            : Math.round(bodyTop) + 0.5;
-          ctx.fillRect(bodyLeft, snappedTop, metrics.bodyWidth, Math.round(bodyHeight));
+          const bodyTop = Math.round(Math.min(yO, yC));
+          const bodyBottom = Math.round(Math.max(yO, yC));
+          const bodyHeight = Math.max(1, bodyBottom - bodyTop);
           
+          ctx.fillStyle = bodyColor;
+          ctx.fillRect(bodyLeft, bodyTop, Math.round(metrics.bodyWidth), bodyHeight);
+          
+          // ✅ حدود الجسم (اختياري، بسمك 0.5 بكسل)
           if (borderColor && metrics.bodyWidth >= 2) {
             ctx.strokeStyle = borderColor;
             ctx.lineWidth = 0.5;
-            ctx.strokeRect(bodyLeft + 0.5, snappedTop + 0.5, metrics.bodyWidth - 1, Math.round(bodyHeight) - 1);
+            // ✅ لا +0.5 لحدود الأجسام المملوءة
+            ctx.strokeRect(bodyLeft, bodyTop, Math.round(metrics.bodyWidth), bodyHeight);
           }
         }
       }
     });
+    
+    // ✅ استعادة إعدادات التنعيم الأصلية للرسم الأخر
+    ctx.imageSmoothingEnabled = originalSmoothing;
   }
   
   drawPriceLine(price, isUp, ps, chartH) {
     if (!ps || !chartH || price == null) return -1;
     const { ctx, w } = this;
     
-    // ✅ استخدام Float + snapForStroke
     const yFloat = ps.priceToYFloat ? ps.priceToYFloat(price, chartH) : ps.priceToY(price, chartH);
     const y = typeof PrecisionUtils !== 'undefined' 
       ? PrecisionUtils.snapForStroke(yFloat, 1) 
@@ -442,7 +449,6 @@ class Canvas2DRenderer {
     if (x < 0 || y < 0 || x > this.w || y > this.h) return;
     const { ctx, w, h } = this;
     
-    // ✅ snapForStroke للخطوط 1بكسل
     const px = typeof PrecisionUtils !== 'undefined' 
       ? PrecisionUtils.snapForStroke(x, 1) 
       : Math.round(x) + 0.5;
@@ -483,36 +489,28 @@ class Canvas2DRenderer {
     const vr = ts.getVisibleRange(w);
     
     batchDraw(ctx, (ctx) => {
-      // ✅ إعدادات الخط
       ctx.lineWidth = lineWidth;
       ctx.globalAlpha = alpha;
       ctx.lineCap = cap;
       ctx.lineJoin = join;
       
-      // ✅ تفعيل imageSmoothing للخطوط المائلة أو الأسمك فقط
-      if (lineWidth > 1 || dashed) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-      } else {
-        ctx.imageSmoothingEnabled = false; // للخطوط العمودية/الأفقية 1بكسل (أكثر حدة)
-      }
+      // ✅ فعّل التنعيم فقط إذا كان الخط منحنياً أو بسمك > 1
+      const needsSmoothing = lineWidth > 1 || dashed || (values?.some?.(v => typeof v === 'object'));
+      ctx.imageSmoothingEnabled = needsSmoothing;
+      ctx.imageSmoothingQuality = needsSmoothing ? 'high' : 'low';
       
       if (dashed) ctx.setLineDash(typeof dashed === 'number' ? [dashed, dashed] : [4, 4]);
       
-      // ✅ كاش الألوان
       const isDynamic = Array.isArray(color);
       if (!isDynamic) ctx.strokeStyle = ColorCache.parse(color, alpha);
       
-      // ✅ الرسم بإحداثيات عشرية + snapForStroke عند الرسم النهائي
       let prevX, prevY, started = false;
       for (let i = vr.start; i <= vr.end; i++) {
         if (values[i] == null || isNaN(values[i])) { started = false; continue; }
         
-        // ✅ استخدام Float للإحداثيات (بدون تقريب مبكر)
         const xFloat = ts.indexToXFloat ? ts.indexToXFloat(i) : ts.indexToX(i);
         const yFloat = ps.priceToYFloat ? ps.priceToYFloat(values[i], chartH) : ps.priceToY(values[i], chartH);
         
-        // ✅ تطبيق snapForStroke فقط عند الرسم النهائي
         const x = typeof PrecisionUtils !== 'undefined' 
           ? PrecisionUtils.snapForStroke(xFloat + 0.5, lineWidth) 
           : Math.round(xFloat) + 0.5;
@@ -552,12 +550,10 @@ class Canvas2DRenderer {
       for (let i = vr.start; i <= vr.end; i++) {
         if (topVals[i] == null || btmVals[i] == null) continue;
         
-        // ✅ Float للإحداثيات
         const xFloat = ts.indexToXFloat ? ts.indexToXFloat(i) : ts.indexToX(i);
         const yTopFloat = ps.priceToYFloat ? ps.priceToYFloat(topVals[i], chartH) : ps.priceToY(topVals[i], chartH);
         const yBtmFloat = ps.priceToYFloat ? ps.priceToYFloat(btmVals[i], chartH) : ps.priceToY(btmVals[i], chartH);
         
-        // ✅ snapForStroke عند الرسم
         const x = typeof PrecisionUtils !== 'undefined' 
           ? PrecisionUtils.snapForStroke(xFloat + 0.5, lineWidth) 
           : Math.round(xFloat) + 0.5;
@@ -617,7 +613,6 @@ class Canvas2DRenderer {
     if (type === 'gap_marker' || type === 'gap_box') { this._drawGapMarkers(items, { ctx, ts, ps, chartH, yOffset }); return; }
     
     for (const s of items) {
-      // ✅ تحويل الإحداثيات باستخدام Float إذا توفر
       let x = s.x, y = s.y;
       
       if (s.idx != null && ts) {
@@ -638,12 +633,12 @@ class Canvas2DRenderer {
       ctx.save();
       ctx.globalAlpha = alpha;
       
-      // ✅ تفعيل imageSmoothing للأشكال المنحنية
+      // ✅ تفعيل imageSmoothing للأشكال المنحنية فقط
       if (['circle', 'ellipse', 'star', 'diamond'].includes(type)) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
       } else {
-        ctx.imageSmoothingEnabled = lineWidth === 1;
+        ctx.imageSmoothingEnabled = lineWidth === 1 ? false : true;
       }
       
       if (s.shadow) {
@@ -652,7 +647,6 @@ class Canvas2DRenderer {
       }
       if (rotation) { ctx.translate(x, y); ctx.rotate(rotation); ctx.translate(-x, -y); }
       
-      // ✅ تطبيق snapForStroke عند الرسم النهائي
       const snapX = typeof PrecisionUtils !== 'undefined' 
         ? PrecisionUtils.snapForStroke(x, lineWidth) 
         : x;
@@ -699,8 +693,8 @@ class Canvas2DRenderer {
     if (s.gradient) ctx.fillStyle = createGradient(ctx, x - w/2, y - h/2, x + w/2, y + h/2, s.gradient.stops);
     else ctx.fillStyle = color;
     if (s.borderRadius) { this._roundedRect(ctx, x - w/2, y - h/2, w, h, s.borderRadius); if (s.fill !== false) ctx.fill(); }
-    else if (s.fill !== false) ctx.fillRect(x - w/2, y - h/2, w, h);
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; if (s.dashed) ctx.setLineDash([4, 4]); ctx.strokeRect(x - w/2, y - h/2, w, h); ctx.setLineDash([]); }
+    else if (s.fill !== false) ctx.fillRect(Math.round(x - w/2), Math.round(y - h/2), Math.round(w), Math.round(h));
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; if (s.dashed) ctx.setLineDash([4, 4]); ctx.strokeRect(Math.round(x - w/2), Math.round(y - h/2), Math.round(w), Math.round(h)); ctx.setLineDash([]); }
     ctx.restore();
   }
   
@@ -718,7 +712,7 @@ class Canvas2DRenderer {
   _drawCircle(ctx, x, y, r, s) {
     const color = ColorCache.parse(s.color || '#fff', s.alpha);
     const stroke = s.strokeColor ? ColorCache.parse(s.strokeColor, s.alpha) : null;
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(Math.round(x), Math.round(y), Math.round(r), 0, Math.PI * 2);
     if (s.fill !== false) { ctx.fillStyle = color; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; if (s.dashed) ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]); }
   }
@@ -726,7 +720,7 @@ class Canvas2DRenderer {
   _drawEllipse(ctx, x, y, radiusX, radiusY, s) {
     const color = ColorCache.parse(s.color || '#fff', s.alpha);
     const stroke = s.strokeColor ? ColorCache.parse(s.strokeColor, s.alpha) : null;
-    ctx.beginPath(); ctx.ellipse(x, y, radiusX, radiusY, s.rotation || 0, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.ellipse(Math.round(x), Math.round(y), Math.round(radiusX), Math.round(radiusY), s.rotation || 0, 0, Math.PI * 2);
     if (s.fill !== false) { ctx.fillStyle = color; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; ctx.stroke(); }
   }
@@ -736,8 +730,8 @@ class Canvas2DRenderer {
     const stroke = s.strokeColor ? ColorCache.parse(s.strokeColor, s.alpha) : null;
     const h = size * 1.2;
     ctx.beginPath();
-    if (direction === 'up') { ctx.moveTo(x, y - h/2); ctx.lineTo(x - size/2, y + h/2); ctx.lineTo(x + size/2, y + h/2); }
-    else { ctx.moveTo(x, y + h/2); ctx.lineTo(x - size/2, y - h/2); ctx.lineTo(x + size/2, y - h/2); }
+    if (direction === 'up') { ctx.moveTo(Math.round(x), Math.round(y - h/2)); ctx.lineTo(Math.round(x - size/2), Math.round(y + h/2)); ctx.lineTo(Math.round(x + size/2), Math.round(y + h/2)); }
+    else { ctx.moveTo(Math.round(x), Math.round(y + h/2)); ctx.lineTo(Math.round(x - size/2), Math.round(y - h/2)); ctx.lineTo(Math.round(x + size/2), Math.round(y - h/2)); }
     ctx.closePath();
     if (s.fill !== false) { ctx.fillStyle = color; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; if (s.dashed) ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]); }
@@ -748,10 +742,10 @@ class Canvas2DRenderer {
     const headSize = size * 0.8, shaftLen = size * 1.2;
     ctx.fillStyle = color; ctx.beginPath();
     switch (direction) {
-      case 'up': ctx.moveTo(x, y - shaftLen - headSize/2); ctx.lineTo(x - headSize/2, y - shaftLen + headSize/2); ctx.lineTo(x + headSize/2, y - shaftLen + headSize/2); ctx.closePath(); ctx.fill(); ctx.fillRect(x - 1.5, y - shaftLen, 3, shaftLen); break;
-      case 'down': ctx.moveTo(x, y + shaftLen + headSize/2); ctx.lineTo(x - headSize/2, y + shaftLen - headSize/2); ctx.lineTo(x + headSize/2, y + shaftLen - headSize/2); ctx.closePath(); ctx.fill(); ctx.fillRect(x - 1.5, y, 3, shaftLen); break;
-      case 'left': ctx.moveTo(x - shaftLen - headSize/2, y); ctx.lineTo(x - shaftLen + headSize/2, y - headSize/2); ctx.lineTo(x - shaftLen + headSize/2, y + headSize/2); ctx.closePath(); ctx.fill(); ctx.fillRect(x - shaftLen, y - 1.5, shaftLen, 3); break;
-      case 'right': ctx.moveTo(x + shaftLen + headSize/2, y); ctx.lineTo(x + shaftLen - headSize/2, y - headSize/2); ctx.lineTo(x + shaftLen - headSize/2, y + headSize/2); ctx.closePath(); ctx.fill(); ctx.fillRect(x, y - 1.5, shaftLen, 3); break;
+      case 'up': ctx.moveTo(Math.round(x), Math.round(y - shaftLen - headSize/2)); ctx.lineTo(Math.round(x - headSize/2), Math.round(y - shaftLen + headSize/2)); ctx.lineTo(Math.round(x + headSize/2), Math.round(y - shaftLen + headSize/2)); ctx.closePath(); ctx.fill(); ctx.fillRect(Math.round(x - 1.5), Math.round(y - shaftLen), 3, Math.round(shaftLen)); break;
+      case 'down': ctx.moveTo(Math.round(x), Math.round(y + shaftLen + headSize/2)); ctx.lineTo(Math.round(x - headSize/2), Math.round(y + shaftLen - headSize/2)); ctx.lineTo(Math.round(x + headSize/2), Math.round(y + shaftLen - headSize/2)); ctx.closePath(); ctx.fill(); ctx.fillRect(Math.round(x - 1.5), Math.round(y), 3, Math.round(shaftLen)); break;
+      case 'left': ctx.moveTo(Math.round(x - shaftLen - headSize/2), Math.round(y)); ctx.lineTo(Math.round(x - shaftLen + headSize/2), Math.round(y - headSize/2)); ctx.lineTo(Math.round(x - shaftLen + headSize/2), Math.round(y + headSize/2)); ctx.closePath(); ctx.fill(); ctx.fillRect(Math.round(x - shaftLen), Math.round(y - 1.5), Math.round(shaftLen), 3); break;
+      case 'right': ctx.moveTo(Math.round(x + shaftLen + headSize/2), Math.round(y)); ctx.lineTo(Math.round(x + shaftLen - headSize/2), Math.round(y - headSize/2)); ctx.lineTo(Math.round(x + shaftLen - headSize/2), Math.round(y + headSize/2)); ctx.closePath(); ctx.fill(); ctx.fillRect(Math.round(x), Math.round(y - 1.5), Math.round(shaftLen), 3); break;
     }
     if (s.strokeColor) { ctx.strokeStyle = ColorCache.parse(s.strokeColor, s.alpha); ctx.lineWidth = s.lineWidth || 1; ctx.stroke(); }
   }
@@ -759,7 +753,7 @@ class Canvas2DRenderer {
   _drawDiamond(ctx, x, y, size, s) {
     const color = ColorCache.parse(s.color || '#fff', s.alpha);
     const stroke = s.strokeColor ? ColorCache.parse(s.strokeColor, s.alpha) : null;
-    ctx.beginPath(); ctx.moveTo(x, y - size); ctx.lineTo(x + size, y); ctx.lineTo(x, y + size); ctx.lineTo(x - size, y); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(Math.round(x), Math.round(y - size)); ctx.lineTo(Math.round(x + size), Math.round(y)); ctx.lineTo(Math.round(x), Math.round(y + size)); ctx.lineTo(Math.round(x - size), Math.round(y)); ctx.closePath();
     if (s.fill !== false) { ctx.fillStyle = color; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = s.lineWidth || 1; if (s.dashed) ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]); }
   }
@@ -771,7 +765,7 @@ class Canvas2DRenderer {
     for (let i = 0; i < spikes * 2; i++) {
       const radius = i % 2 === 0 ? outerRadius : innerRadius;
       const angle = (i * Math.PI / spikes) - Math.PI/2;
-      const px = x + Math.cos(angle) * radius, py = y + Math.sin(angle) * radius;
+      const px = Math.round(x + Math.cos(angle) * radius), py = Math.round(y + Math.sin(angle) * radius);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath(); ctx.fillStyle = color; ctx.fill();
@@ -781,21 +775,21 @@ class Canvas2DRenderer {
   _drawCross(ctx, x, y, size, s) {
     const color = ColorCache.parse(s.strokeColor || s.color || '#fff', s.alpha);
     ctx.strokeStyle = color; ctx.lineWidth = s.lineWidth || 2;
-    ctx.beginPath(); ctx.moveTo(x - size, y - size); ctx.lineTo(x + size, y + size);
-    ctx.moveTo(x + size, y - size); ctx.lineTo(x - size, y + size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(Math.round(x - size), Math.round(y - size)); ctx.lineTo(Math.round(x + size), Math.round(y + size));
+    ctx.moveTo(Math.round(x + size), Math.round(y - size)); ctx.lineTo(Math.round(x - size), Math.round(y + size)); ctx.stroke();
   }
   
   _drawPlus(ctx, x, y, size, s) {
     const color = ColorCache.parse(s.strokeColor || s.color || '#fff', s.alpha);
     ctx.strokeStyle = color; ctx.lineWidth = s.lineWidth || 2;
-    ctx.beginPath(); ctx.moveTo(x - size, y); ctx.lineTo(x + size, y);
-    ctx.moveTo(x, y - size); ctx.lineTo(x, y + size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(Math.round(x - size), Math.round(y)); ctx.lineTo(Math.round(x + size), Math.round(y));
+    ctx.moveTo(Math.round(x), Math.round(y - size)); ctx.lineTo(Math.round(x), Math.round(y + size)); ctx.stroke();
   }
   
   _drawSingleLine(ctx, x1, y1, x2, y2, s) {
     ctx.strokeStyle = ColorCache.parse(s.color || '#fff', s.alpha); ctx.lineWidth = s.lineWidth || 1;
     if (s.dashed) ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(Math.round(x1), Math.round(y1)); ctx.lineTo(Math.round(x2), Math.round(y2)); ctx.stroke();
     ctx.setLineDash([]);
   }
   
@@ -818,11 +812,10 @@ class Canvas2DRenderer {
       
       if (x == null || y == null) continue;
       
-      // ✅ snapForStroke عند الرسم
       const snapX = typeof PrecisionUtils !== 'undefined' ? PrecisionUtils.snapForStroke(x, s.lineWidth || 1) : x;
       const snapY = typeof PrecisionUtils !== 'undefined' ? PrecisionUtils.snapForStroke(y, s.lineWidth || 1) : y;
       
-      if (i === 0) ctx.moveTo(snapX, snapY); else ctx.lineTo(snapX, snapY);
+      if (i === 0) ctx.moveTo(Math.round(snapX), Math.round(snapY)); else ctx.lineTo(Math.round(snapX), Math.round(snapY));
     }
     if (close) ctx.closePath();
     if (s.fill !== false) { ctx.fillStyle = color; ctx.fill(); }
@@ -843,8 +836,8 @@ class Canvas2DRenderer {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     let lx = x, ly = y; const offset = (s.labelSize || 9) + 4;
     switch (pos) { case 'top': ly = y - offset; break; case 'bottom': ly = y + offset; break; case 'left': lx = x - offset; ctx.textAlign = 'right'; break; case 'right': lx = x + offset; ctx.textAlign = 'left'; break; }
-    if (s.labelBg) { const metrics = ctx.measureText(text); ctx.fillStyle = ColorCache.parse(s.labelBg, 0.85); ctx.fillRect(lx - metrics.width/2 - 3, ly - 7, metrics.width + 6, 14); }
-    ctx.fillStyle = ColorCache.parse(s.labelColor || '#fff', s.alpha); ctx.fillText(text, lx, ly);
+    if (s.labelBg) { const metrics = ctx.measureText(text); ctx.fillStyle = ColorCache.parse(s.labelBg, 0.85); ctx.fillRect(Math.round(lx - metrics.width/2 - 3), Math.round(ly - 7), Math.round(metrics.width + 6), 14); }
+    ctx.fillStyle = ColorCache.parse(s.labelColor || '#fff', s.alpha); ctx.fillText(text, Math.round(lx), Math.round(ly));
     ctx.restore();
   }
   
@@ -862,13 +855,13 @@ class Canvas2DRenderer {
       ctx.save();
       ctx.globalAlpha = gap.alpha ?? 0.15;
       ctx.fillStyle = ColorCache.parse(gap.color || 'rgba(255,215,64,0.2)', gap.alpha);
-      ctx.fillRect(Math.min(x1, x2), Math.min(yTop, yBtm) + yOffset, Math.abs(x2 - x1), Math.abs(yBtm - yTop));
+      ctx.fillRect(Math.round(Math.min(x1, x2)), Math.round(Math.min(yTop, yBtm) + yOffset), Math.round(Math.abs(x2 - x1)), Math.round(Math.abs(yBtm - yTop)));
       ctx.globalAlpha = gap.alphaBorder ?? 0.6;
       ctx.strokeStyle = ColorCache.parse(gap.borderColor || gap.color || '#ffd740', gap.alpha);
       ctx.lineWidth = gap.lineWidth || 1; ctx.setLineDash([3, 3]);
-      ctx.strokeRect(Math.min(x1, x2), Math.min(yTop, yBtm) + yOffset, Math.abs(x2 - x1), Math.abs(yBtm - yTop));
+      ctx.strokeRect(Math.round(Math.min(x1, x2)), Math.round(Math.min(yTop, yBtm) + yOffset), Math.round(Math.abs(x2 - x1)), Math.round(Math.abs(yBtm - yTop)));
       ctx.setLineDash([]);
-      if (gap.label) { ctx.globalAlpha = 1; ctx.font = `bold ${gap.labelSize || 9}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = ColorCache.parse(gap.labelColor || '#ffd740', 1); ctx.fillText(gap.label, (x1 + x2) / 2, (yTop + yBtm) / 2 + yOffset); }
+      if (gap.label) { ctx.globalAlpha = 1; ctx.font = `bold ${gap.labelSize || 9}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = ColorCache.parse(gap.labelColor || '#ffd740', 1); ctx.fillText(gap.label, Math.round((x1 + x2) / 2), Math.round((yTop + yBtm) / 2 + yOffset)); }
       ctx.restore();
     }
   }
@@ -892,13 +885,13 @@ class Canvas2DRenderer {
         const left = Math.min(x1, x2), top = Math.min(y1, y2);
         ctx.globalAlpha = r.alpha ?? 1;
         ctx.fillStyle = ColorCache.parse(r.color || 'rgba(255,255,255,0.1)', r.alpha);
-        ctx.fillRect(left, top, width, height);
+        ctx.fillRect(Math.round(left), Math.round(top + yOffset), Math.round(width), Math.round(height));
         if (r.strokeColor || strokeColor) {
           ctx.globalAlpha = r.alphaBorder ?? r.alpha ?? 1;
           ctx.strokeStyle = ColorCache.parse(r.strokeColor || strokeColor, r.alpha);
           ctx.lineWidth = r.lineWidth || lineWidth;
           if (dashed || r.dashed) ctx.setLineDash([4, 4]);
-          ctx.strokeRect(left, top, width, height);
+          ctx.strokeRect(Math.round(left), Math.round(top + yOffset), Math.round(width), Math.round(height));
           ctx.setLineDash([]);
         }
       }
@@ -915,7 +908,6 @@ class Canvas2DRenderer {
     batchDraw(ctx, (ctx) => {
       ctx.setLineDash([2, 4]); ctx.lineWidth = 0.5;
       
-      // ─── خطوط الوقت العمودية (محسّنة للأداء) ─────────────────────────
       if (timeIntervals.length > 0) {
         const vr = ts.getVisibleRange(w);
         const first = ts.data[Math.max(0, Math.floor(vr.start))];
@@ -925,19 +917,15 @@ class Canvas2DRenderer {
         const timeSpan = last.time - first.time;
         if (timeSpan <= 0) return;
         
-        // ✅ حد أقصى لعدد الخطوط المسموح برسمها (لمنع الثقل)
         const MAX_GRID_LINES = CFG?.ui?.grid?.maxTimeLines || 50;
         
         for (const interval of timeIntervals) {
-          // ✅ حساب عدد الخطوط المتوقع مسبقاً
           const expectedLines = Math.ceil(timeSpan / interval);
           if (expectedLines > MAX_GRID_LINES) {
-            // تخطي هذا الفاصل إذا كان سيُنتج خطوطاً كثيرة جداً
             console.warn(`[Renderer] Skipping grid interval ${interval}ms: would draw ${expectedLines} lines (max: ${MAX_GRID_LINES})`);
             continue;
           }
           
-          // ✅ البدء من أول فاصل يقع ضمن النطاق المرئي (بدون حلقة لا نهائية)
           let t = Math.ceil(first.time / interval) * interval;
           let drawnCount = 0;
           
@@ -959,16 +947,13 @@ class Canvas2DRenderer {
         }
       }
       
-      // ─── خطوط السعر الأفقية (محسّنة) ───────────────────────────────
       if (priceLevels?.length > 0 && ps) {
-        // ✅ حد أقصى لخطوط السعر أيضاً
         const MAX_PRICE_LINES = CFG?.ui?.grid?.maxPriceLines || 20;
         let drawnPriceLines = 0;
         
         for (const price of priceLevels) {
           if (drawnPriceLines >= MAX_PRICE_LINES) break;
           
-          // ✅ تحقق أن السعر ضمن النطاق المرئي قبل الرسم
           if (price < ps.min || price > ps.max) continue;
           
           const yFloat = ps.priceToYFloat ? ps.priceToYFloat(price, chartH) : ps.priceToY(price, chartH);
@@ -976,7 +961,6 @@ class Canvas2DRenderer {
             ? PrecisionUtils.snapForStroke(yFloat + 0.5 + yOffset, 1) 
             : Math.round(yFloat) + 0.5 + yOffset;
           
-          // ✅ تحقق أن الخط ضمن منطقة الرسم
           if (y < yOffset || y > chartH + yOffset) continue;
           
           ctx.strokeStyle = ColorCache.parse(priceColor || 'rgba(200,150,100,0.25)', 1);
@@ -1126,4 +1110,4 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { ChartRenderer, Canvas2DRenderer, PriceAxisRenderer, TimeAxisRenderer, TimeScale, PriceScale, getColor, parseColor, candleMetrics, drawText, createGradient, batchDraw, ColorCache };
 }
 
-console.log('[Renderer] Ultra Renderer Engine v3.2.1 loaded ✓ | High-Precision: ON | ColorCache: ON | Grid: OPTIMIZED | Signals: OFF | Shapes: ON');
+console.log('[Renderer] Ultra Renderer Engine v3.2.2 loaded ✓ | High-Precision: ON | ColorCache: ON | Grid: OPTIMIZED | CandleSharpness: FIXED | Signals: OFF | Shapes: ON');
