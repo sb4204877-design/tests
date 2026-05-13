@@ -1,0 +1,1485 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   UI STYLES - تنسيقات واجهة المستخدم فقط (أزرار، قوائم، نوافذ، نصوص)
+   لا يحتوي على أي تنسيقات لمحرك الرسم أو الكانفاس
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   🔹 متغيرات واجهة المستخدم (منفصلة عن ألوان الشارت)
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ألوان الخلفية والنص للواجهة */
+  --ui-bg: #060a12;
+  --ui-bg-secondary: #0f1c2e;
+  --ui-bg-tertiary: #1a2a4a;
+  --ui-text: #e0ecff;
+  --ui-text-dim: #4a6a8a;
+  --ui-text-bright: #8aaccc;
+  
+  /* ألوان الأزرار والتفاعلات */
+  --ui-btn-bg: #152035;
+  --ui-btn-hover: #1e2b45;
+  --ui-btn-active: #2a3f5f;
+  --ui-btn-danger: #ff5252;
+  --ui-btn-success: #00e676;
+  --ui-accent: #2196f3;
+  
+  /* ألوان القوائم واللوحات */
+  --ui-dropdown-bg: #152035;
+  --ui-dropdown-border: #2a3f5f;
+  --ui-dropdown-hover: #1e2b45;
+  --ui-panel-bg: rgba(21, 32, 53, 0.98);
+  
+  /* أبعاد الواجهة */
+  --ui-toolbar-h: 48px;
+  --ui-card-max-w: 280px;
+  --ui-card-padding: 8px;
+  --ui-font-size: 11px;
+  
+  /* عناصر التحكم */
+  --ui-slider-track: #2a3f5f;
+  --ui-slider-thumb: #2196f3;
+  --ui-color-picker-size: 24px;
+  
+  /* تأثيرات */
+  --ui-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --ui-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --ui-transition-fast: 0.15s ease;
+  --ui-transition-normal: 0.2s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الاتجاه العربي (RTL) للواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+html {
+  direction: rtl;
+}
+
+/* النصوص والأرقام دائماً من اليسار لليمين */
+.price-info,
+#price-change,
+.connection-status,
+.ohlc-value,
+.xh-val {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   شريط الأدوات - الأزرار والمجموعات
+   ═══════════════════════════════════════════════════════════════════ */
+#toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: var(--ui-toolbar-h);
+  min-height: var(--ui-toolbar-h);
+  background: var(--ui-bg);
+  border-bottom: 1px solid var(--ui-bg-secondary);
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  z-index: 100;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tb-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--ui-bg-secondary);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.toolbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* ── الأزرار الأساسية ── */
+.tb-btn {
+  background: var(--ui-btn-bg);
+  color: var(--ui-text-dim);
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: 
+    background var(--ui-transition-fast),
+    color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    transform 0.05s;
+  white-space: nowrap;
+  line-height: 1;
+  flex-shrink: 0;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tb-btn:hover {
+  background: var(--ui-btn-hover);
+  color: var(--ui-text-bright);
+}
+
+.tb-btn:active {
+  transform: scale(0.97);
+}
+
+.tb-btn.active {
+  background: var(--ui-btn-active);
+  color: var(--ui-text);
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 2px var(--ui-accent), 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.tb-btn.primary {
+  background: var(--ui-accent);
+  color: #fff;
+}
+
+.tb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tb-btn.loading {
+  position: relative;
+  pointer-events: none;
+}
+
+.tb-btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   قائمة المؤشرات المنسدلة - مع دعم RTL
+   ═══════════════════════════════════════════════════════════════════ */
+#btn-indicators {
+  position: relative;
+}
+
+#indicators-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  
+  /* ✅ إصلاح حاسم لـ RTL: نستخدم right بدلاً من left */
+  right: 0;
+  left: auto;
+  
+  min-width: 200px;
+  max-width: 90vw;
+  
+  background: var(--ui-dropdown-bg);
+  border: 1px solid var(--ui-dropdown-border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-y: auto;
+  z-index: 150;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--ui-shadow-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#indicators-dropdown.show {
+  display: flex !important;
+  animation: dropdown-in 0.15s ease-out;
+}
+
+/* ✅ فالبك للواجهات اللاتينية */
+html[dir="ltr"] #indicators-dropdown {
+  right: auto;
+  left: 0;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* عناصر القائمة */
+.indicator-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background var(--ui-transition-fast);
+}
+
+.indicator-item:hover {
+  background: var(--ui-dropdown-hover);
+}
+
+.indicator-item input[type="checkbox"] {
+  accent-color: var(--ui-accent);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.indicator-item label {
+  flex: 1;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* أزرار التحكم داخل كل مؤشر */
+.indicator-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.indicator-controls button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 3px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ui-btn-bg);
+  border: 1px solid var(--ui-bg-secondary);
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  transition: all var(--ui-transition-fast);
+  flex-shrink: 0;
+}
+
+.indicator-controls button:hover {
+  background: var(--ui-btn-hover);
+  color: var(--ui-text-bright);
+}
+
+.indicator-controls button.hide-btn.active {
+  background: var(--ui-btn-active);
+  color: var(--ui-text);
+}
+
+.indicator-controls button.delete-btn:hover {
+  background: var(--ui-btn-danger);
+  color: #fff;
+  border-color: var(--ui-btn-danger);
+}
+
+/* تخصيص شريط التمرير للقوائم */
+#indicators-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+#indicators-dropdown::-webkit-scrollbar-track {
+  background: var(--ui-bg-secondary);
+  border-radius: 3px;
+}
+
+#indicators-dropdown::-webkit-scrollbar-thumb {
+  background: var(--ui-slider-thumb);
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   شريط البحث للزوجات
+   ═══════════════════════════════════════════════════════════════════ */
+#symbol-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#symbol-search-input {
+  width: 140px;
+  padding: 6px 10px 6px 28px;
+  background: var(--ui-btn-bg);
+  border: 1px solid var(--ui-bg-secondary);
+  border-radius: 4px;
+  color: var(--ui-text);
+  font-size: 11px;
+  font-family: inherit;
+  transition: width var(--ui-transition-normal), border-color var(--ui-transition-fast);
+}
+
+#symbol-search-input:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+  width: 180px;
+}
+
+#symbol-search-input::placeholder {
+  color: var(--ui-text-dim);
+}
+
+#symbol-search-icon {
+  position: absolute;
+  /* في RTL، الأيقونة على اليمين */
+  right: 8px;
+  left: auto;
+  color: var(--ui-text-dim);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ✅ فالبك لـ LTR */
+html[dir="ltr"] #symbol-search-icon {
+  right: auto;
+  left: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   قائمة الزوجات القابلة للتمرير - مع دعم RTL
+   ═══════════════════════════════════════════════════════════════════ */
+#symbol-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  
+  /* ✅ إصلاح لـ RTL */
+  right: 0;
+  left: auto;
+  
+  min-width: 220px;
+  max-width: 90vw;
+  
+  background: var(--ui-dropdown-bg);
+  border: 1px solid var(--ui-dropdown-border);
+  border-radius: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 150;
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--ui-shadow-md);
+}
+
+#symbol-list.show {
+  display: flex !important;
+  animation: dropdown-in 0.15s ease-out;
+}
+
+/* ✅ فالبك لـ LTR */
+html[dir="ltr"] #symbol-list {
+  right: auto;
+  left: 0;
+}
+
+.symbol-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  transition: background var(--ui-transition-fast);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.symbol-item:hover,
+.symbol-item.active {
+  background: var(--ui-dropdown-hover);
+  color: var(--ui-text);
+}
+
+.symbol-item .tf-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: var(--ui-bg-secondary);
+  border-radius: 3px;
+  color: var(--ui-text-bright);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   معلومات السعر والاتصال في شريط الأدوات
+   ═══════════════════════════════════════════════════════════════════ */
+.price-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  direction: ltr;
+  flex-shrink: 0;
+}
+
+#price-change {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  transition: background var(--ui-transition-fast);
+}
+
+#price-change.up {
+  background: rgba(0, 230, 118, 0.2);
+  color: #00e676;
+}
+
+#price-change.down {
+  background: rgba(255, 23, 68, 0.2);
+  color: #ff1744;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+  direction: ltr;
+  flex-shrink: 0;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #444;
+  transition: background 0.3s, box-shadow 0.3s;
+  flex-shrink: 0;
+}
+
+.live-dot.ok {
+  background: #00e676;
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.5);
+}
+
+.live-dot.err {
+  background: #ff1744;
+  box-shadow: 0 0 6px rgba(255, 23, 68, 0.5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   لوحة المعلومات المبسطة (الأرقام فقط)
+   ═══════════════════════════════════════════════════════════════════ */
+#info-panel {
+  position: absolute;
+  top: 10px;
+  /* في RTL، نضع اللوحة على اليسار */
+  left: 10px;
+  right: auto;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  min-width: 280px;
+  z-index: 100;
+  display: none;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.symbol {
+  font-weight: 700;
+  font-size: 12px;
+  color: #fff;
+}
+
+.timeframe {
+  background: rgba(51, 65, 85, 0.5);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--ui-text-dim);
+  font-weight: 600;
+}
+
+.ohlc-simple {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ohlc-item {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.ohlc-label {
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.ohlc-item span:last-child {
+  font-weight: 600;
+  color: var(--ui-text);
+  font-size: 11px;
+}
+
+.ohlc-item.change span:last-child {
+  font-weight: 700;
+}
+
+.ohlc-item.change .up { color: #00e676; }
+.ohlc-item.change .down { color: #ff1744; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   القوائم المنبثقة (Modals)
+   ═══════════════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--ui-transition-normal), visibility var(--ui-transition-normal);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  width: 92%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(10px);
+  transition: transform var(--ui-transition-normal);
+  box-shadow: var(--ui-shadow-md);
+}
+
+.modal-overlay.active .modal-card {
+  transform: translateY(0);
+}
+
+.modal-header {
+  padding: 14px 20px;
+  background: rgba(15, 23, 42, 0.7);
+  border-bottom: 1px solid #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--ui-text-dim);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: all var(--ui-transition-fast);
+  line-height: 1;
+}
+
+.close-btn:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: #fff;
+}
+
+.modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   عناصر القائمة داخل المودال
+   ═══════════════════════════════════════════════════════════════════ */
+.menu-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background var(--ui-transition-fast);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.menu-item:hover {
+  background: rgba(30, 41, 59, 0.7);
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.menu-icon-wrapper {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(51, 65, 85, 0.3);
+  border-radius: 6px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.menu-text {
+  font-size: 14px;
+  color: var(--ui-text);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   شبكة الأطر الزمنية
+   ═══════════════════════════════════════════════════════════════════ */
+.timeframes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 10px;
+}
+
+.timeframe-btn {
+  padding: 10px;
+  background: var(--ui-btn-bg);
+  border: 1px solid var(--ui-bg-secondary);
+  border-radius: 8px;
+  color: var(--ui-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--ui-transition-fast);
+  font-weight: 500;
+}
+
+.timeframe-btn:hover {
+  background: var(--ui-btn-hover);
+  border-color: var(--ui-dropdown-border);
+  color: var(--ui-text-bright);
+}
+
+.timeframe-btn.active {
+  background: rgba(77, 255, 204, 0.2);
+  border-color: #4dffcc;
+  color: #4dffcc;
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   لوحة الإعدادات الجانبية
+   ═══════════════════════════════════════════════════════════════════ */
+#settings-panel {
+  position: absolute;
+  top: calc(var(--ui-toolbar-h) + 8px);
+  /* في RTL، اللوحة على اليمين */
+  right: 12px;
+  left: auto;
+  width: 280px;
+  background: var(--ui-panel-bg);
+  border: 1px solid var(--ui-dropdown-border);
+  border-radius: 8px;
+  padding: 12px;
+  z-index: 90;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--ui-shadow-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  max-height: calc(100vh - var(--ui-toolbar-h) - 40px);
+  overflow-y: auto;
+}
+
+#settings-panel.show {
+  display: flex;
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-bg-secondary);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── عناصر التحكم في الإعدادات ── */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.setting-label {
+  font-size: 10px;
+  color: var(--ui-text-dim);
+  flex: 1;
+}
+
+/* منتقي الألوان */
+.color-picker {
+  width: var(--ui-color-picker-size);
+  height: var(--ui-color-picker-size);
+  border: 2px solid var(--ui-bg-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  transition: border-color var(--ui-transition-fast);
+  flex-shrink: 0;
+}
+
+.color-picker:hover {
+  border-color: var(--ui-accent);
+}
+
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.color-picker::-moz-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+/* شريط التمرير */
+.setting-slider {
+  flex: 1;
+  height: 4px;
+  background: var(--ui-slider-track);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--ui-slider-thumb);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--ui-transition-fast);
+}
+
+.setting-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.setting-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--ui-slider-thumb);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.setting-value {
+  font-size: 9px;
+  color: var(--ui-text-bright);
+  min-width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* زر التبديل */
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--ui-bg-secondary);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--ui-transition-fast);
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: var(--ui-accent);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--ui-transition-fast);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(16px);
+}
+
+/* زر التطبيق */
+.btn-primary {
+  width: 100%;
+  padding: 10px;
+  background: #4dffcc;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--ui-transition-fast);
+  margin-top: 8px;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   التنبيهات العائمة (Toasts)
+   ═══════════════════════════════════════════════════════════════════ */
+#alert-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 90vw;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.alert-toast {
+  background: rgba(15, 28, 46, 0.98);
+  color: var(--ui-text);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--ui-shadow-md);
+  opacity: 0;
+  transform: translateY(10px);
+  animation: toast-in 0.3s ease-out forwards;
+  pointer-events: auto;
+  border-left: 3px solid var(--ui-accent);
+  max-width: 320px;
+  width: 100%;
+  word-wrap: break-word;
+  text-align: center;
+  direction: ltr;
+}
+
+.alert-toast.up { border-left-color: #00e676; }
+.alert-toast.down { border-left-color: #ff1744; }
+
+@keyframes toast-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات الموبايل للواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  :root {
+    --ui-toolbar-h: 40px;
+    --ui-card-max-w: 90vw;
+    --ui-card-padding: 6px;
+    --ui-font-size: 9px;
+  }
+  
+  #toolbar {
+    padding: 0 4px;
+    height: var(--ui-toolbar-h);
+    min-height: var(--ui-toolbar-h);
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  
+  .toolbar-group {
+    gap: 2px;
+  }
+  
+  .tb-sep {
+    height: 18px;
+    margin: 0 3px;
+  }
+  
+  .tb-btn {
+    padding: 4px 7px;
+    font-size: 9px;
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 3px;
+  }
+  
+  .indicator-controls button {
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+  }
+  
+  .price-info {
+    font-size: 10px;
+    gap: 3px;
+  }
+  
+  #price-change {
+    padding: 1px 4px;
+    font-size: 9px;
+  }
+  
+  .connection-status {
+    font-size: 9px;
+    gap: 3px;
+  }
+  
+  .live-dot {
+    width: 6px;
+    height: 6px;
+  }
+  
+  #info-panel {
+    left: 8px;
+    right: auto;
+    font-size: 9px;
+    padding: 4px 8px;
+    min-width: auto;
+    max-width: calc(100vw - 16px);
+  }
+  
+  .ohlc-simple {
+    gap: 8px;
+  }
+  
+  .ohlc-item {
+    gap: 2px;
+  }
+  
+  .ohlc-label {
+    font-size: 8px;
+  }
+  
+  .ohlc-item span:last-child {
+    font-size: 9px;
+  }
+  
+  /* القوائم المنسدلة على الموبايل */
+  #indicators-dropdown,
+  #symbol-list {
+    max-width: calc(100vw - 24px);
+    right: 12px;
+    left: auto;
+  }
+  
+  /* لوحة الإعدادات ملء الشاشة */
+  #settings-panel {
+    top: calc(var(--ui-toolbar-h) + 4px);
+    right: 4px;
+    left: 4px;
+    width: auto;
+    max-height: calc(100vh - var(--ui-toolbar-h) - 20px);
+  }
+  
+  /* التنبيهات */
+  #alert-container {
+    bottom: 12px;
+    padding: 0 8px;
+  }
+  
+  .alert-toast {
+    font-size: 11px;
+    padding: 8px 12px;
+    max-width: 100%;
+  }
+  
+  .loader-ring {
+    width: 32px;
+    height: 32px;
+    border-width: 2px;
+  }
+  
+  #loading-text {
+    font-size: 12px;
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  :root {
+    --ui-toolbar-h: 36px;
+    --ui-font-size: 8px;
+  }
+  
+  .tb-btn {
+    padding: 3px 6px;
+    font-size: 8px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+  
+  .price-info {
+    font-size: 9px;
+  }
+  
+  #price-change {
+    font-size: 8px;
+    padding: 1px 3px;
+  }
+  
+  .connection-status {
+    font-size: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الشاشات عالية الدقة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .modal-card,
+  #settings-panel,
+  #indicators-dropdown,
+  #symbol-list {
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الوضع المظلم/الفاتح التلقائي للواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+  /* القيم الافتراضية بالفعل داكنة */
+  ::selection {
+    background: var(--ui-accent);
+    color: #fff;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--ui-slider-thumb);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ui-bg: #f8f9fa;
+    --ui-bg-secondary: #e9ecef;
+    --ui-bg-tertiary: #dee2e6;
+    --ui-text: #1a1a2e;
+    --ui-text-dim: #495057;
+    --ui-text-bright: #343a40;
+    --ui-btn-bg: #f1f3f5;
+    --ui-btn-hover: #e9ecef;
+    --ui-btn-active: #dee2e6;
+    --ui-dropdown-bg: #ffffff;
+    --ui-dropdown-border: #dee2e6;
+    --ui-panel-bg: rgba(255, 255, 255, 0.98);
+  }
+  
+  .modal-card {
+    background: #ffffff;
+    border-color: #dee2e6;
+  }
+  
+  .modal-header {
+    background: rgba(248, 249, 250, 0.9);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم تقليل الحركة والشفافية
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .modal-card,
+  #settings-panel,
+  #indicators-dropdown,
+  #symbol-list {
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  #settings-panel,
+  #indicators-dropdown,
+  #symbol-list,
+  .modal-card {
+    backdrop-filter: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التباين العالي
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-contrast: high) {
+  :root {
+    --ui-text-dim: #6a8aaa;
+    --ui-text-bright: #aad0f0;
+    --ui-btn-bg: #1a2840;
+    --ui-btn-hover: #253555;
+  }
+  
+  .tb-btn {
+    border-color: var(--ui-accent);
+  }
+  
+  .modal-card,
+  #settings-panel {
+    border-width: 2px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الوضع الآمن (Safe Areas)
+   ═══════════════════════════════════════════════════════════════════ */
+@supports (padding: env(safe-area-inset-top)) {
+  #toolbar {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات الأداء للواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* استخدام التسريع بالـ GPU للعناصر المتحركة */
+#toolbar,
+.modal-card,
+#settings-panel,
+#indicators-dropdown,
+#symbol-list {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* تقليل إعادة الرسم للعناصر الثابتة */
+#info-panel,
+.alert-toast {
+  contain: layout style;
+}
+
+/* تحسين أداء التمرير */
+#indicators-dropdown,
+#symbol-list,
+.modal-body,
+#settings-panel {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* تحسين ظهور العناصر */
+#settings-panel.show,
+#indicators-dropdown.show,
+#symbol-list.show {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الطباعة للواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+@media print {
+  #toolbar,
+  #loading-overlay,
+  #alert-container,
+  #info-panel,
+  #settings-panel,
+  #indicators-dropdown,
+  #symbol-list,
+  .modal-overlay {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   منع تحديد النص على عناصر الواجهة
+   ═══════════════════════════════════════════════════════════════════ */
+#toolbar,
+.tb-btn,
+.menu-item,
+.symbol-item,
+.indicator-item,
+.toggle-switch,
+.modal-header,
+.settings-title {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات إمكانية الوصول
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* التركيز المرئي للعناصر التفاعلية */
+.tb-btn:focus-visible,
+.color-picker:focus-visible,
+.setting-slider:focus-visible,
+.toggle-switch:focus-visible,
+.close-btn:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.2);
+}
+
+/* إزالة التركيز الافتراضي غير المرغوب */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* دعم قارئات الشاشة */
+[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+[aria-live="polite"] {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التوافق مع المتصفحات القديمة
+   ═══════════════════════════════════════════════════════════════════ */
+
+@supports not (backdrop-filter: blur(8px)) {
+  #settings-panel,
+  #indicators-dropdown,
+  #symbol-list,
+  #info-panel {
+    backdrop-filter: none;
+    background: var(--ui-panel-bg);
+  }
+}
+
+@supports not (display: flex) {
+  #toolbar,
+  .menu-item,
+  .indicator-item,
+  .symbol-item,
+  .setting-row {
+    display: block;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات اللمس للأجهزة المحمولة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  .tb-btn,
+  .menu-item,
+  .symbol-item,
+  .indicator-item,
+  .toggle-switch,
+  .color-picker {
+    min-height: 44px; /* ✅ حجم لمس مريح */
+  }
+  
+  .color-picker {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .indicator-controls button {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التوافق مع الوضع عالي التباين في ويندوز
+   ═══════════════════════════════════════════════════════════════════ */
+@media (forced-colors: active) {
+  .tb-btn,
+  .toggle-switch,
+  .color-picker,
+  .modal-card,
+  #settings-panel {
+    border: 2px solid CanvasText;
+  }
+  
+  .tb-btn.active {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات إضافية
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* تأثيرات انتقالية ناعمة */
+* {
+  transition: 
+    background-color var(--ui-transition-fast),
+    color var(--ui-transition-fast),
+    border-color var(--ui-transition-fast),
+    transform 0.1s ease;
+}
+
+/* تحسين مظهر النصوص */
+#price-change,
+.ohlc-item span:last-child,
+.setting-value {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* تحسين مظهر الأزرار النشطة */
+.tb-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: var(--ui-accent);
+  border-radius: 50%;
+}
+
+/* تحسين ظهور القوائم */
+#indicators-dropdown.show,
+#symbol-list.show {
+  box-shadow: var(--ui-shadow-md);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   📚 ملاحظات للمطورين
+   ═══════════════════════════════════════════════════════════════════
+   
+   🔹 هذا الملف يحتوي فقط على تنسيقات واجهة المستخدم
+   🔹 لا يلمس أي عناصر كانفاس أو رسم
+   🔹 جميع الألوان تستخدم متغيرات :root أو قيم مباشرة
+   🔹 دعم RTL مدمج: استخدم right/left حسب الاتجاه
+   🔹 لتحديث لون: عدّل المتغير في :root هنا
+   
+   مثال لتحديث لون الأزرار:
+   :root {
+     --ui-btn-bg: #253555;  // لون جديد
+   }
+   
+   ═══════════════════════════════════════════════════════════════════ */
