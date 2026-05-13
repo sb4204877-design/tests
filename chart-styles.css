@@ -1,6 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
    CHART STYLES - تنسيقات محرك الرسم والشارت فقط
    لا يحتوي على أي تنسيقات لواجهة المستخدم (أزرار، قوائم، نوافذ)
+   
+   ✅ الإصدار: 1.2.0 | الإصلاح: ظهور النصوص الكامل في البطاقات والعناصر العائمة
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -71,6 +73,8 @@ body {
   overscroll-behavior: none;
   font-family: 'JetBrains Mono', 'Courier New', monospace, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -191,92 +195,209 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   عناصر عائمة فوق الـ Canvas (معلومات السعر والمؤشر)
+   🎴 عناصر عائمة فوق الـ Canvas (إصلاح النصوص "المختفية")
+   ✅ الإصدار: 1.1.0 | الحل: z-index + overflow + padding + line-height
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ملصق السعر العائم */
+/* ─── قاعدة عامة لجميع البطاقات والعناصر العائمة ─────────────────── */
+#price-label,
+#xhair-box,
+#indicator-values,
+.alert-toast,
+.price-card,
+.info-card,
+.tooltip-card {
+  position: relative !important;
+  z-index: 100 !important;  /* ✅ ضمان أن البطاقة فوق كل عناصر الشارت */
+  overflow: visible !important;  /* ✅ منع قص النصوص */
+  padding: 8px 12px !important;  /* ✅ مساحة كافية للنص */
+  box-sizing: border-box;
+  /* ✅ تحسين عرض النصوص */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* ✅ منع القص غير المرغوب */
+  clip-path: none !important;
+  contain: none !important;  /* ✅ إزالة القيود التي قد تقص النصوص */
+}
+
+/* ─── النصوص داخل البطاقات ───────────────────────────────────────── */
+#price-label span,
+#price-label .price,
+#xhair-box span,
+#indicator-values span,
+.alert-toast,
+.xh-row,
+.xh-lbl,
+.xh-val,
+.card-text,
+.price-value,
+.info-value {
+  position: relative !important;
+  z-index: 110 !important;  /* ✅ النص فوق خلفية البطاقة */
+  display: inline-flex !important;  /* ✅ منع الانكسار الغريب */
+  align-items: center;  /* ✅ محاذاة عمودية صحيحة */
+  vertical-align: middle !important;
+  line-height: 1.4 !important;  /* ✅ مساحة بين الأسطر */
+  white-space: nowrap !important;  /* ✅ منع الالتفاف غير المرغوب */
+  /* ✅ ضمان ظهور النص كاملاً */
+  text-overflow: clip !important;
+  overflow: visible !important;
+  min-height: 16px;  /* ✅ ارتفاع أدنى للنص */
+  padding: 0 2px;  /* ✅ مساحة جانبية صغيرة */
+}
+
+/* ─── ملصق السعر العائم (#price-label) ───────────────────────────── */
 #price-label {
-  position: absolute;
-  right: calc(var(--axis-price-w) + 1px);
-  top: 0;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  z-index: 20;
+  position: absolute !important;
+  right: calc(var(--axis-price-w) + 1px) !important;
+  top: 0 !important;
+  padding: 4px 10px !important;  /* ✅ زيادة المساحة الداخلية */
+  font-size: 12px !important;  /* ✅ حجم خط واضح */
+  font-weight: 600 !important;
+  color: #fff !important;
+  z-index: 100 !important;
   pointer-events: none;
   display: none;
-  border-radius: 0 0 0 2px;
-  white-space: nowrap;
-  background: rgba(6, 10, 18, 0.9);
-  border: 1px solid var(--chart-grid);
+  border-radius: 0 0 0 4px !important;
+  white-space: nowrap !important;
+  background: rgba(6, 10, 18, 0.95) !important;  /* ✅ خلفية معتمة أكثر */
+  border: 1px solid var(--chart-grid) !important;
+  border-left: 3px solid transparent !important;  /* ✅ مؤشر لوني جانبي */
   transition: background 0.2s ease, border-color 0.2s ease;
+  /* ✅ ضمان عدم قص النص */
+  min-width: 70px !important;
+  text-align: center !important;
 }
 
 #price-label.up { 
-  background: rgba(0, 230, 118, 0.25); 
-  border-left: 3px solid var(--candle-up); 
+  background: rgba(0, 230, 118, 0.3) !important; 
+  border-left-color: var(--candle-up) !important; 
 }
 
 #price-label.down { 
-  background: rgba(255, 23, 68, 0.25); 
-  border-left: 3px solid var(--candle-down); 
+  background: rgba(255, 23, 68, 0.3) !important; 
+  border-left-color: var(--candle-down) !important; 
 }
 
-/* صندوق معلومات المؤشر الصلب */
-#xhair-box, #indicator-values {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  background: rgba(15, 28, 46, 0.95);
-  border: 1px solid var(--chart-grid);
-  padding: 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  line-height: 1.4;
+/* ─── صندوق معلومات المؤشر الصلب (#xhair-box, #indicator-values) ─ */
+#xhair-box,
+#indicator-values {
+  position: absolute !important;
+  left: 12px !important;
+  top: 12px !important;
+  background: rgba(15, 28, 46, 0.98) !important;  /* ✅ خلفية معتمة جداً */
+  border: 1px solid var(--chart-grid) !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  line-height: 1.5 !important;  /* ✅ زيادة المسافة بين الأسطر */
   pointer-events: none;
   display: none;
-  z-index: 20;
+  z-index: 100 !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  white-space: nowrap;
-  max-width: 280px;
-  width: auto;
+  white-space: nowrap !important;
+  max-width: 320px !important;  /* ✅ عرض أقصى معس */
+  width: auto !important;
   box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  contain: layout style paint;
+  /* ✅ إزالة القيود التي تقص النصوص */
+  overflow: visible !important;
+  text-overflow: clip !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;  /* ✅ ظل أوضح */
+  /* ✅ تحسين الأداء بدون قص */
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 #indicator-values {
-  top: auto;
-  bottom: calc(var(--axis-time-h) + 12px);
-  left: 12px;
-  max-width: 280px;
+  top: auto !important;
+  bottom: calc(var(--axis-time-h) + 12px) !important;
+  left: 12px !important;
+  max-width: 320px !important;
 }
 
+/* ─── صفوف المعلومات داخل الصناديق ──────────────────────────────── */
 .xh-row { 
-  display: flex; 
-  justify-content: space-between; 
-  gap: 8px; 
-  margin: 2px 0; 
+  display: flex !important; 
+  justify-content: space-between !important; 
+  align-items: center !important;
+  gap: 10px !important;  /* ✅ مسافة أكبر بين العناصر */
+  margin: 3px 0 !important;  /* ✅ مسافة عمودية أكبر */
+  padding: 1px 0 !important;
+  width: 100% !important;
 }
 
 .xh-lbl { 
-  color: var(--text-secondary, #4a6a8a); 
+  color: var(--text-secondary, #6a8a9a) !important; 
+  font-weight: 400 !important;
+  min-width: 20px !important;  /* ✅ عرض أدنى للتسميات */
 }
 
 .xh-val { 
-  color: var(--text-bright, #8aaccc); 
-  font-weight: 600; 
-  font-feature-settings: "tnum";
-  font-variant-numeric: tabular-nums;
+  color: var(--text-bright, #a0c0d0) !important; 
+  font-weight: 600 !important; 
+  font-feature-settings: "tnum" !important;
+  font-variant-numeric: tabular-nums !important;
+  min-width: 60px !important;  /* ✅ عرض أدنى للقيم */
+  text-align: right !important;  /* ✅ محاذاة الأرقام لليمين */
+  direction: ltr !important;  /* ✅ أرقام دائماً من اليسار لليمين */
+  unicode-bidi: isolate !important;
 }
 
-/* ألوان النصوص داخل الشارت */
+/* ─── ألوان النصوص داخل الشارت ──────────────────────────────────── */
 .up { color: var(--candle-up) !important; }
 .down { color: var(--candle-down) !important; }
+
+/* ─── بطاقات التنبيهات (Toasts) ─────────────────────────────────── */
+#alert-container {
+  position: fixed !important;
+  bottom: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 1000 !important;  /* ✅ فوق كل شيء */
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  pointer-events: none;
+  max-width: 90vw !important;
+  padding: 0 12px !important;
+  box-sizing: border-box;
+}
+
+.alert-toast {
+  background: rgba(15, 28, 46, 0.98) !important;
+  color: var(--text-primary, #e0ecff) !important;
+  padding: 12px 18px !important;  /* ✅ مساحة داخلية أكبر */
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5) !important;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: toast-in 0.3s ease-out forwards;
+  pointer-events: auto;
+  border-left: 4px solid var(--chart-ma) !important;  /* ✅ مؤشر لوني أوضح */
+  max-width: 360px !important;
+  width: 100% !important;
+  /* ✅ ضمان ظهور النص كاملاً */
+  white-space: normal !important;  /* ✅ السماح بالالتفاف */
+  word-wrap: break-word !important;
+  text-align: center !important;
+  line-height: 1.5 !important;
+  overflow: visible !important;
+  z-index: 1010 !important;  /* ✅ فوق الصناديق الأخرى */
+}
+
+.alert-toast.up { border-left-color: var(--candle-up) !important; }
+.alert-toast.down { border-left-color: var(--candle-down) !important; }
+
+@keyframes toast-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(-10px); }
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    خط السعر الأخير وملصقه
@@ -294,37 +415,50 @@ body {
 }
 
 #last-price-label {
-  position: absolute;
-  right: 0;
-  width: var(--axis-price-w);
-  transform: translateY(-50%);
-  color: white;
-  padding: 8px 4px;
-  border-radius: 4px 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  white-space: nowrap;
-  z-index: 20;
+  position: absolute !important;
+  right: 0 !important;
+  width: var(--axis-price-w) !important;
+  transform: translateY(-50%) !important;
+  color: white !important;
+  padding: 10px 6px !important;  /* ✅ مساحة أكبر */
+  border-radius: 4px 0 0 4px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  font-family: 'SF Mono', 'Menlo', monospace !important;
+  white-space: nowrap !important;
+  z-index: 100 !important;
   display: block !important;
-  text-align: center;
+  text-align: center !important;
   transition: background 0.2s ease, top 0.1s ease;
   pointer-events: none;
+  background: rgba(6, 10, 18, 0.95) !important;
+  border: 1px solid var(--chart-grid) !important;
+  border-right: none !important;
+  /* ✅ ضمان ظهور النص */
+  overflow: visible !important;
+  min-height: 36px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 2px !important;
 }
 
 #last-price-label .price {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 2px;
+  display: block !important;
+  font-size: 12px !important;
+  margin-bottom: 2px !important;
+  line-height: 1.3 !important;
 }
 
 #last-price-label .timer {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 10px;
-  display: block;
-  font-weight: 400;
+  background: rgba(0, 0, 0, 0.3) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-size: 10px !important;
+  display: block !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -352,6 +486,9 @@ body {
   padding: 2px 4px;
   border-radius: 2px;
   pointer-events: none;
+  z-index: 20 !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -363,7 +500,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: 1;  /* ✅ تحت كل العناصر الأخرى */
   pointer-events: none;
   opacity: var(--candle-alpha, 0.15);
   background-size: cover;
@@ -422,54 +559,6 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   التنبيهات العائمة
-   ═══════════════════════════════════════════════════════════════════ */
-#alert-container {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-  max-width: 90vw;
-  padding: 0 12px;
-  box-sizing: border-box;
-}
-
-.alert-toast {
-  background: rgba(15, 28, 46, 0.98);
-  color: var(--text-primary, #e0ecff);
-  padding: 10px 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  opacity: 0;
-  transform: translateY(10px);
-  animation: toast-in 0.3s ease-out forwards;
-  pointer-events: auto;
-  border-left: 3px solid var(--chart-ma);
-  max-width: 320px;
-  width: 100%;
-  word-wrap: break-word;
-  text-align: center;
-}
-
-.alert-toast.up { border-left-color: var(--candle-up); }
-.alert-toast.down { border-left-color: var(--candle-down); }
-
-@keyframes toast-in {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes toast-out {
-  to { opacity: 0; transform: translateY(-10px); }
-}
-
-/* ═══════════════════════════════════════════════════════════════════
    تحسينات الموبايل للشارت
    ═══════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
@@ -479,35 +568,47 @@ body {
   }
   
   #price-label { 
-    right: calc(var(--axis-price-w) + 1px); 
-    font-size: 9px; 
-    padding: 1px 5px;
+    right: calc(var(--axis-price-w) + 1px) !important; 
+    font-size: 10px !important; 
+    padding: 3px 8px !important;
+    min-width: 60px !important;
   }
   
-  #xhair-box, #indicator-values {
-    font-size: 9px;
-    padding: 6px;
-    left: 8px;
-    right: 8px;
-    top: 8px;
-    max-width: calc(100vw - 16px);
-    width: auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  #xhair-box,
+  #indicator-values {
+    font-size: 10px !important;
+    padding: 8px !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: 10px !important;
+    max-width: calc(100vw - 20px) !important;
+    width: auto !important;
+    /* ✅ إزالة القيود التي تقص النصوص */
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    z-index: 100 !important;
   }
   
   #indicator-values {
-    bottom: calc(var(--axis-time-h) + 8px);
-    left: 8px;
-    right: 8px;
-    max-width: calc(100vw - 16px);
+    bottom: calc(var(--axis-time-h) + 10px) !important;
+    left: 10px !important;
+    right: 10px !important;
+    max-width: calc(100vw - 20px) !important;
   }
   
   .xh-row { 
-    gap: 4px; 
-    margin: 1px 0; 
+    gap: 6px !important; 
+    margin: 2px 0 !important; 
+  }
+  
+  .xh-lbl {
+    min-width: 18px !important;
+  }
+  
+  .xh-val {
+    min-width: 50px !important;
   }
   
   #main-canvas-area {
@@ -517,15 +618,16 @@ body {
   }
   
   #alert-container {
-    bottom: 12px;
-    padding: 0 8px;
+    bottom: 15px !important;
+    padding: 0 10px !important;
   }
   
   .alert-toast {
-    font-size: 11px;
-    padding: 8px 12px;
-    max-width: 100%;
-    text-align: center;
+    font-size: 11px !important;
+    padding: 10px 14px !important;
+    max-width: 100% !important;
+    text-align: center !important;
+    line-height: 1.4 !important;
   }
   
   .loader-ring {
@@ -546,9 +648,22 @@ body {
     --axis-time-h: 22px;
   }
   
+  #price-label {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+  }
+  
   #xhair-box {
-    font-size: 8px;
-    padding: 4px;
+    font-size: 9px !important;
+    padding: 6px !important;
+  }
+  
+  .xh-row {
+    gap: 4px !important;
+  }
+  
+  .xh-val {
+    min-width: 45px !important;
   }
 }
 
@@ -560,6 +675,16 @@ body {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
     image-rendering: pixelated;
+  }
+  
+  /* ✅ تحسين وضوح النصوص على الشاشات عالية الدقة */
+  #price-label,
+  #xhair-box,
+  #indicator-values,
+  .alert-toast,
+  #last-price-label {
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: geometricPrecision;
   }
 }
 
@@ -604,6 +729,15 @@ body {
     background: var(--chart-bg);
     border-color: var(--chart-grid);
   }
+  
+  /* ✅ تحسين ظهور النصوص في الوضع الفاتح */
+  #price-label,
+  #xhair-box,
+  #indicator-values {
+    background: rgba(248, 249, 250, 0.98) !important;
+    color: #1a1a1a !important;
+    border-color: #dee2e6 !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -618,7 +752,9 @@ body {
   }
   
   #price-label,
-  #last-price-label {
+  #last-price-label,
+  #xhair-box,
+  #indicator-values {
     transition: none !important;
   }
 }
@@ -634,6 +770,13 @@ body {
     opacity: 1 !important;
     backdrop-filter: none !important;
   }
+  
+  /* ✅ ضمان ظهور النصوص بدون شفافية */
+  #price-label,
+  .alert-toast {
+    opacity: 1 !important;
+    background: rgba(6, 10, 18, 1) !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -644,8 +787,11 @@ body {
     --chart-grid: #6a8aaa;
   }
   
-  #xhair-box, #indicator-values {
-    border-width: 2px;
+  #xhair-box,
+  #indicator-values,
+  #price-label,
+  .alert-toast {
+    border-width: 2px !important;
   }
   
   #price-axis-canvas {
@@ -654,6 +800,13 @@ body {
   
   #time-axis-area {
     border-top-width: 2px;
+  }
+  
+  /* ✅ نصوص أكثر وضوحاً في التباين العالي */
+  .xh-val,
+  #price-label .price,
+  #last-price-label .price {
+    font-weight: 700 !important;
   }
 }
 
@@ -668,6 +821,13 @@ body {
   #chart-layout {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+  
+  /* ✅ ضمان عدم قص العناصر العائمة في الحواف الآمنة */
+  #xhair-box,
+  #indicator-values {
+    left: calc(12px + env(safe-area-inset-left)) !important;
+    right: calc(12px + env(safe-area-inset-right)) !important;
   }
 }
 
@@ -685,13 +845,14 @@ body {
   contain: layout style paint;
 }
 
-/* تقليل إعادة الرسم للعناصر الثابتة */
+/* ✅ تحسين أداء العناصر العائمة بدون قص النصوص */
 #price-label,
 #last-price-label,
 #xhair-box,
 #indicator-values {
-  contain: layout style;
-  will-change: top, background;
+  contain: style !important;  /* ✅ إزالة layout/paint لمنع القص */
+  will-change: top, background, opacity;
+  transform: translateZ(0);
 }
 
 /* تحسين أداء التمرير واللمس */
@@ -825,9 +986,11 @@ body {
 #price-label,
 #last-price-label,
 .xh-val,
-.alert-toast {
-  direction: ltr;
-  unicode-bidi: isolate;
+.alert-toast,
+.price-value {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  text-align: right !important;  /* ✅ الأرقام تُقرأ من اليسار */
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -844,6 +1007,7 @@ body {
   border-radius: inherit;
   pointer-events: none;
   transition: box-shadow 0.2s ease;
+  z-index: -1;  /* ✅ خلف النص */
 }
 
 #price-label:hover::after,
@@ -871,10 +1035,12 @@ body {
    ═══════════════════════════════════════════════════════════════════ */
 #price-label .price,
 #last-price-label .price,
-.xh-val {
-  font-feature-settings: "tnum";
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.2px;
+.xh-val,
+.price-value {
+  font-feature-settings: "tnum" !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -0.2px !important;
+  font-weight: 600 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -928,8 +1094,12 @@ body {
   }
   
   #price-label,
-  #last-price-label {
-    border: 2px solid CanvasText;
+  #last-price-label,
+  #xhair-box,
+  #indicator-values {
+    border: 2px solid CanvasText !important;
+    background: Canvas !important;
+    color: CanvasText !important;
   }
 }
 
@@ -952,6 +1122,15 @@ body {
   cursor: grabbing;
 }
 
+/* ✅ ضمان ظهور العناصر العائمة فوراً */
+#price-label.show,
+#xhair-box.show,
+#indicator-values.show {
+  display: block !important;
+  opacity: 1 !important;
+  transform: translateZ(0) !important;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    مساحة مخصصة للمؤشرات المخصصة (للتطوير المستقبلي)
    ═══════════════════════════════════════════════════════════════════ */
@@ -965,6 +1144,7 @@ body {
   background: var(--chart-bg);
   z-index: 5;
   display: none;
+  overflow: visible !important;  /* ✅ منع قص النصوص */
 }
 
 .custom-indicator-pane.active {
@@ -980,6 +1160,13 @@ body {
    🔹 جميع الألوان تستخدم متغيرات :root المتوافقة مع CFG.colors في config.js
    🔹 لتحديث لون: عدّل المتغير هنا + القيمة في config.js
    🔹 لدعم متصفح جديد: استخدم @supports مع فالبك مناسب
+   
+   ✅ إصلاح النصوص "المختفية":
+   - استخدم overflow: visible !important لمنع القص
+   - استخدم z-index مرتفع لضمان طبقة فوق الخلفيات
+   - استخدم padding و line-height كافيين للمساحة
+   - تجنب contain: layout/paint للعناصر التي تحتوي نصوصاً
+   - استخدم white-space: nowrap فقط عند الضرورة القصوى
    
    مثال لتحديث لون الشموع:
    :root {
