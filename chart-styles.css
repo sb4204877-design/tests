@@ -1,0 +1,991 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CHART STYLES - تنسيقات محرك الرسم والشارت فقط
+   لا يحتوي على أي تنسيقات لواجهة المستخدم (أزرار، قوائم، نوافذ)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   🔹 متغيرات الألوان الخاصة بالشارت (متوافقة مع CFG.colors)
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ألوان الخلفية الأساسية للشارت */
+  --chart-bg: #060a12;              /* ✅ CFG.colors.bg */
+  --chart-grid: #0f1c2e;            /* ✅ CFG.colors.grid */
+  
+  /* ألوان الشموع */
+  --candle-up: #00e676;             /* ✅ CFG.colors.up */
+  --candle-down: #ff1744;           /* ✅ CFG.colors.down */
+  
+  /* ألوان الشموع المفصلة (جسم/ذيل/إطار) */
+  --candle-up-body: #00e676;
+  --candle-up-wick: #00c853;
+  --candle-up-border: #00a142;
+  --candle-down-body: #ff1744;
+  --candle-down-wick: #d50000;
+  --candle-down-border: #aa0000;
+  --candle-alpha: 1.0;
+  
+  /* ألوان المؤشرات والخطوط */
+  --chart-ma: #f9a825;              /* ✅ CFG.colors.ma */
+  --chart-crosshair: rgba(150,180,220,0.5);
+  --chart-price-line: #2196f3;
+  
+  /* ألوان الإشارات */
+  --signal-buy: #2196f3;
+  --signal-sell: #ffd740;
+  --signal-counter: #ff5252;
+  
+  /* أبعاد المحاور */
+  --axis-price-w: 72px;
+  --axis-time-h: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   إعادة تعيين أساسية للعناصر المؤثرة على الرسم
+   ═══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   الجسم والحاوية الرئيسية
+   ═══════════════════════════════════════════════════════════════════ */
+html {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--chart-bg);
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+  font-family: 'JetBrains Mono', 'Courier New', monospace, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تخطيط الشارت الرئيسي
+   ═══════════════════════════════════════════════════════════════════ */
+#chart-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--chart-bg);
+}
+
+#canvas-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr var(--axis-price-w);
+  grid-template-rows: 1fr var(--axis-time-h);
+  position: relative;
+  overflow: hidden;
+}
+
+/* منطقة الرسم الرئيسية */
+#main-canvas-area {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  background: var(--chart-bg);
+  cursor: crosshair;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* الكانفاس الرئيسي للرسم */
+#main-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  touch-action: none;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* كانفاس الطبقة العلوية للإشارات والرسوم */
+#overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* محور السعر الجانبي */
+#price-axis-canvas {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  width: var(--axis-price-w);
+  height: 100%;
+  background: var(--chart-bg);
+  border-left: 1px solid var(--chart-grid);
+  touch-action: none;
+}
+
+/* منطقة محور الوقت السفلي */
+#time-axis-area {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+  position: relative;
+  width: 100%;
+  height: var(--axis-time-h);
+  min-height: var(--axis-time-h);
+  background: var(--chart-bg);
+  border-top: 1px solid var(--chart-grid);
+  overflow: hidden;
+}
+
+#time-axis-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  touch-action: none;
+}
+
+/* زاوية المحاور */
+#axis-corner {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: var(--axis-price-w);
+  height: var(--axis-time-h);
+  background: var(--chart-bg);
+  border-top: 1px solid var(--chart-grid);
+  border-left: 1px solid var(--chart-grid);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   عناصر عائمة فوق الـ Canvas (معلومات السعر والمؤشر)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ملصق السعر العائم */
+#price-label {
+  position: absolute;
+  right: calc(var(--axis-price-w) + 1px);
+  top: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  z-index: 20;
+  pointer-events: none;
+  display: none;
+  border-radius: 0 0 0 2px;
+  white-space: nowrap;
+  background: rgba(6, 10, 18, 0.9);
+  border: 1px solid var(--chart-grid);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+#price-label.up { 
+  background: rgba(0, 230, 118, 0.25); 
+  border-left: 3px solid var(--candle-up); 
+}
+
+#price-label.down { 
+  background: rgba(255, 23, 68, 0.25); 
+  border-left: 3px solid var(--candle-down); 
+}
+
+/* صندوق معلومات المؤشر الصلب */
+#xhair-box, #indicator-values {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  background: rgba(15, 28, 46, 0.95);
+  border: 1px solid var(--chart-grid);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  display: none;
+  z-index: 20;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  white-space: nowrap;
+  max-width: 280px;
+  width: auto;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  contain: layout style paint;
+}
+
+#indicator-values {
+  top: auto;
+  bottom: calc(var(--axis-time-h) + 12px);
+  left: 12px;
+  max-width: 280px;
+}
+
+.xh-row { 
+  display: flex; 
+  justify-content: space-between; 
+  gap: 8px; 
+  margin: 2px 0; 
+}
+
+.xh-lbl { 
+  color: var(--text-secondary, #4a6a8a); 
+}
+
+.xh-val { 
+  color: var(--text-bright, #8aaccc); 
+  font-weight: 600; 
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* ألوان النصوص داخل الشارت */
+.up { color: var(--candle-up) !important; }
+.down { color: var(--candle-down) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   خط السعر الأخير وملصقه
+   ═══════════════════════════════════════════════════════════════════ */
+#price-line {
+  position: absolute;
+  left: 0;
+  width: calc(100% - var(--axis-price-w));
+  height: 1px;
+  background: repeating-linear-gradient(to right, transparent, transparent 4px, currentColor 4px, currentColor 8px);
+  pointer-events: none;
+  z-index: 15;
+  display: block !important;
+  transition: top 0.1s ease;
+}
+
+#last-price-label {
+  position: absolute;
+  right: 0;
+  width: var(--axis-price-w);
+  transform: translateY(-50%);
+  color: white;
+  padding: 8px 4px;
+  border-radius: 4px 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  white-space: nowrap;
+  z-index: 20;
+  display: block !important;
+  text-align: center;
+  transition: background 0.2s ease, top 0.1s ease;
+  pointer-events: none;
+}
+
+#last-price-label .price {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+#last-price-label .timer {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  display: block;
+  font-weight: 400;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   خطوط الدليل (تُدار برمجياً ولكن لها أنماط مرجعية)
+   ═══════════════════════════════════════════════════════════════════ */
+.guide-line {
+  position: absolute;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.guide-line.time {
+  border-left: 1px dashed rgba(100, 150, 200, 0.3);
+}
+
+.guide-line.price {
+  border-top: 1px dashed rgba(200, 150, 100, 0.3);
+}
+
+.guide-line.label {
+  position: absolute;
+  font-size: 9px;
+  color: var(--text-secondary, #4a6a8a);
+  background: rgba(6, 10, 18, 0.8);
+  padding: 2px 4px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   خلفية الصورة للشارت
+   ═══════════════════════════════════════════════════════════════════ */
+#chart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--candle-alpha, 0.15);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: opacity 0.3s ease;
+}
+
+#chart-background.contain {
+  background-size: contain;
+}
+
+#chart-background.custom-size {
+  background-size: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   شاشة التحميل
+   ═══════════════════════════════════════════════════════════════════ */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--chart-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}
+
+#loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.loader-ring {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--chart-grid);
+  border-top-color: var(--chart-ma);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+#loading-text {
+  margin-top: 16px;
+  color: var(--text-secondary, #4a6a8a);
+  font-size: 13px;
+  text-align: center;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   التنبيهات العائمة
+   ═══════════════════════════════════════════════════════════════════ */
+#alert-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 90vw;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.alert-toast {
+  background: rgba(15, 28, 46, 0.98);
+  color: var(--text-primary, #e0ecff);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(10px);
+  animation: toast-in 0.3s ease-out forwards;
+  pointer-events: auto;
+  border-left: 3px solid var(--chart-ma);
+  max-width: 320px;
+  width: 100%;
+  word-wrap: break-word;
+  text-align: center;
+}
+
+.alert-toast.up { border-left-color: var(--candle-up); }
+.alert-toast.down { border-left-color: var(--candle-down); }
+
+@keyframes toast-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات الموبايل للشارت
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  :root {
+    --axis-price-w: 56px;
+    --axis-time-h: 24px;
+  }
+  
+  #price-label { 
+    right: calc(var(--axis-price-w) + 1px); 
+    font-size: 9px; 
+    padding: 1px 5px;
+  }
+  
+  #xhair-box, #indicator-values {
+    font-size: 9px;
+    padding: 6px;
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    max-width: calc(100vw - 16px);
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  #indicator-values {
+    bottom: calc(var(--axis-time-h) + 8px);
+    left: 8px;
+    right: 8px;
+    max-width: calc(100vw - 16px);
+  }
+  
+  .xh-row { 
+    gap: 4px; 
+    margin: 1px 0; 
+  }
+  
+  #main-canvas-area {
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: contain;
+  }
+  
+  #alert-container {
+    bottom: 12px;
+    padding: 0 8px;
+  }
+  
+  .alert-toast {
+    font-size: 11px;
+    padding: 8px 12px;
+    max-width: 100%;
+    text-align: center;
+  }
+  
+  .loader-ring {
+    width: 32px;
+    height: 32px;
+    border-width: 2px;
+  }
+  
+  #loading-text {
+    font-size: 12px;
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  :root {
+    --axis-price-w: 48px;
+    --axis-time-h: 22px;
+  }
+  
+  #xhair-box {
+    font-size: 8px;
+    padding: 4px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الشاشات عالية الدقة (Retina/4K)
+   ═══════════════════════════════════════════════════════════════════ */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+}
+
+@media (resolution >= 3dppx) {
+  canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الوضع المظلم/الفاتح التلقائي
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: dark light;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* القيم الافتراضية بالفعل داكنة */
+  ::selection {
+    background: var(--chart-ma);
+    color: #fff;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --chart-bg: #f8f9fa;
+    --chart-grid: #e9ecef;
+    --candle-up: #00c853;
+    --candle-down: #d50000;
+  }
+  
+  #main-canvas-area {
+    background: var(--chart-bg);
+  }
+  
+  #price-axis-canvas,
+  #time-axis-area,
+  #axis-corner {
+    background: var(--chart-bg);
+    border-color: var(--chart-grid);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم تقليل الحركة والشفافية
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  #price-label,
+  #last-price-label {
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --candle-alpha: 1.0;
+  }
+  
+  #chart-background,
+  #xhair-box,
+  #indicator-values {
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التباين العالي
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-contrast: high) {
+  :root {
+    --chart-grid: #6a8aaa;
+  }
+  
+  #xhair-box, #indicator-values {
+    border-width: 2px;
+  }
+  
+  #price-axis-canvas {
+    border-left-width: 2px;
+  }
+  
+  #time-axis-area {
+    border-top-width: 2px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الوضع الآمن (Safe Areas) للأجهزة الحديثة
+   ═══════════════════════════════════════════════════════════════════ */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  #chart-layout {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات الأداء للشارت
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* استخدام التسريع بالـ GPU للعناصر المتحركة */
+#main-canvas-area,
+#overlay-canvas,
+#price-axis-canvas,
+#time-axis-canvas {
+  will-change: transform;
+  transform: translateZ(0);
+  contain: layout style paint;
+}
+
+/* تقليل إعادة الرسم للعناصر الثابتة */
+#price-label,
+#last-price-label,
+#xhair-box,
+#indicator-values {
+  contain: layout style;
+  will-change: top, background;
+}
+
+/* تحسين أداء التمرير واللمس */
+#main-canvas-area {
+  -webkit-overflow-scrolling: touch;
+  touch-action: none;
+}
+
+/* تحسين تحميل الكانفاس */
+#main-canvas,
+#overlay-canvas {
+  opacity: 1;
+  transition: opacity 0.1s ease;
+}
+
+#loading-overlay.hidden + #chart-layout #main-canvas {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الطباعة للشارت
+   ═══════════════════════════════════════════════════════════════════ */
+@media print {
+  #loading-overlay,
+  #alert-container,
+  #xhair-box,
+  #indicator-values,
+  #price-label,
+  #chart-background {
+    display: none !important;
+  }
+  
+  #chart-layout {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  
+  canvas {
+    max-width: 100%;
+    height: auto !important;
+    border: 1px solid #000;
+  }
+  
+  :root {
+    --chart-bg: #ffffff;
+    --chart-grid: #000000;
+    --candle-up: #008000;
+    --candle-down: #ff0000;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   منع تحديد النص على عناصر الشارت
+   ═══════════════════════════════════════════════════════════════════ */
+#main-canvas-area,
+#price-axis-canvas,
+#time-axis-area,
+#xhair-box,
+#indicator-values,
+#price-label,
+#last-price-label {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التوافق مع المتصفحات القديمة للكانفاس
+   ═══════════════════════════════════════════════════════════════════ */
+@supports not (display: grid) {
+  #canvas-wrapper {
+    display: block;
+  }
+  
+  #main-canvas-area {
+    width: calc(100% - var(--axis-price-w));
+    float: left;
+  }
+  
+  #price-axis-canvas {
+    float: right;
+    width: var(--axis-price-w);
+  }
+  
+  #time-axis-area {
+    clear: both;
+    width: 100%;
+  }
+}
+
+@supports not (backdrop-filter: blur(4px)) {
+  #xhair-box,
+  #indicator-values {
+    backdrop-filter: none;
+    background: rgba(15, 28, 46, 0.98);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات اللمس للأجهزة المحمولة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  #main-canvas-area {
+    touch-action: pan-x pan-y;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* إخفاء المؤشر الصلب تلقائياً على اللمس */
+  #xhair-box, #indicator-values {
+    display: none !important;
+  }
+  
+  body.show-crosshair #xhair-box,
+  body.show-crosshair #indicator-values {
+    display: block !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الاتجاه العربي للشارت (الأرقام دائماً لليسار)
+   ═══════════════════════════════════════════════════════════════════ */
+#price-label,
+#last-price-label,
+.xh-val,
+.alert-toast {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات التركيز البصري للعناصر
+   ═══════════════════════════════════════════════════════════════════ */
+#price-label::after,
+#last-price-label::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: box-shadow 0.2s ease;
+}
+
+#price-label:hover::after,
+#last-price-label:hover::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تأثيرات انتقالية ناعمة للعناصر العائمة
+   ═══════════════════════════════════════════════════════════════════ */
+#price-label,
+#last-price-label,
+#xhair-box,
+#indicator-values {
+  transition: 
+    top 0.1s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    opacity 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسين مظهر النصوص الرقمية
+   ═══════════════════════════════════════════════════════════════════ */
+#price-label .price,
+#last-price-label .price,
+.xh-val {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم الوضع الكامل للشاشة
+   ═══════════════════════════════════════════════════════════════════ */
+:fullscreen #chart-layout,
+:-webkit-full-screen #chart-layout {
+  width: 100vw;
+  height: 100vh;
+  background: var(--chart-bg);
+}
+
+:fullscreen #main-canvas-area,
+:-webkit-full-screen #main-canvas-area {
+  cursor: crosshair;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات للشبكات البطيئة
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) and (prefers-reduced-data: reduce) {
+  #chart-background {
+    display: none !important;
+  }
+  
+  #xhair-box,
+  #indicator-values {
+    backdrop-filter: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم إمكانية الوصول للشارت
+   ═══════════════════════════════════════════════════════════════════ */
+[aria-live="polite"] {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   دعم التوافق مع الوضع عالي التباين في ويندوز
+   ═══════════════════════════════════════════════════════════════════ */
+@media (forced-colors: active) {
+  #price-axis-canvas,
+  #time-axis-area,
+  #axis-corner {
+    border-color: CanvasText;
+  }
+  
+  #price-label,
+  #last-price-label {
+    border: 2px solid CanvasText;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   تحسينات إضافية للأداء البصري
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* تقليل الوميض عند التحميل الأولي */
+#main-canvas {
+  opacity: 0;
+}
+
+#main-canvas.loaded {
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+/* تحسين مظهر العناصر عند التمرير السريع */
+#main-canvas-area:active {
+  cursor: grabbing;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   مساحة مخصصة للمؤشرات المخصصة (للتطوير المستقبلي)
+   ═══════════════════════════════════════════════════════════════════ */
+.custom-indicator-pane {
+  position: absolute;
+  bottom: var(--axis-time-h);
+  left: 0;
+  right: var(--axis-price-w);
+  height: 100px;
+  border-top: 1px solid var(--chart-grid);
+  background: var(--chart-bg);
+  z-index: 5;
+  display: none;
+}
+
+.custom-indicator-pane.active {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   📚 ملاحظات للمطورين
+   ═══════════════════════════════════════════════════════════════════
+   
+   🔹 هذا الملف يحتوي فقط على تنسيقات الشارت (الرسم، الكانفاس، المحاور)
+   🔹 لا يلمس أي عناصر واجهة مستخدم (أزرار، قوائم، نوافذ منبثقة)
+   🔹 جميع الألوان تستخدم متغيرات :root المتوافقة مع CFG.colors في config.js
+   🔹 لتحديث لون: عدّل المتغير هنا + القيمة في config.js
+   🔹 لدعم متصفح جديد: استخدم @supports مع فالبك مناسب
+   
+   مثال لتحديث لون الشموع:
+   :root {
+     --candle-up: #00ff88;  // لون جديد
+   }
+   // ثم في config.js:
+   // CFG.colors.up = '#00ff88';
+   
+   ═══════════════════════════════════════════════════════════════════ */
